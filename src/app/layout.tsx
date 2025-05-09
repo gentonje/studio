@@ -29,12 +29,12 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}>
         <AssessmentProvider>
-          <AppHeader />
+          <AppHeader /> {/* AppHeader component itself will have id="app-header" if needed, or styled directly by tag */}
           <main className="flex-grow container mx-auto px-4 py-8">
             {children}
           </main>
           <Toaster />
-          <footer className="bg-secondary text-secondary-foreground py-4 text-center text-sm">
+          <footer className="app-footer bg-secondary text-secondary-foreground py-4 text-center text-sm no-print">
             © {new Date().getFullYear()} HACT Navigator. All rights reserved.
           </footer>
         </AssessmentProvider>
