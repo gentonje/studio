@@ -81,4 +81,6 @@ export interface AssessmentContextState {
   calculateOverallScore: () => void;
   getRuleBasedRecommendation: (question: HACTQuestion, answer: Answer) => string | null;
   resetAssessment: () => void;
+  areAllQuestionsInSectionAnswered: (sectionId: string) => boolean; // Added
 }
+

@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { ReactNode } from 'react';
@@ -29,6 +28,7 @@ const defaultState: AssessmentContextState = {
   calculateOverallScore: () => {},
   getRuleBasedRecommendation: () => null,
   resetAssessment: () => {},
+  areAllQuestionsInSectionAnswered: () => false, // Added default
 };
 
 export const AssessmentContext = createContext<AssessmentContextState>(defaultState);
@@ -62,8 +62,6 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
       }
     } catch (error) {
       console.error("Failed to load state from local storage:", error);
-      // Potentially reset to default if state is corrupted
-      // setAssessmentData(JSON.parse(JSON.stringify(initialAssessmentData)));
     }
   }, []);
 
@@ -121,12 +119,42 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     }));
   }, []);
 
+  const getQuestionStatus = useCallback((questionId: string): 'answered' | 'skipped' | 'unanswered' => {
+    const answer = answers[questionId];
+    if (!answer || answer.value === null || answer.value === '') return 'unanswered';
+    if (answer.value === 'N/A') return 'skipped'; 
+    return 'answered';
+  }, [answers]);
+
+  const areAllQuestionsInSectionAnswered = useCallback((targetSectionId: string): boolean => {
+    const sectionToCheck = assessmentData.sections.find(s => s.id === targetSectionId);
+    if (!sectionToCheck) return false; // Should not happen if targetSectionId is valid
+
+    for (const q of sectionToCheck.questions) {
+      if (q.type === 'info_only') continue; // Info_only questions don't need an answer
+      const status = getQuestionStatus(q.id);
+      if (status === 'unanswered') {
+        return false; // Found an unanswered question
+      }
+    }
+    return true; // All answerable questions are answered or skipped
+  }, [assessmentData.sections, getQuestionStatus]);
+
   const navigateToNextQuestion = useCallback(() => {
     const section = getCurrentSection();
+    const currentQ = getCurrentQuestion();
+    if (currentQ && currentQ.type !== 'info_only' && getQuestionStatus(currentQ.id) === 'unanswered') {
+      toast({
+        title: "Question Unanswered",
+        description: "Please answer the current question before proceeding.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (section && currentQuestionIndexInSection < section.questions.length - 1) {
       setCurrentQuestionIndexInSection(prev => prev + 1);
     }
-  }, [currentQuestionIndexInSection, getCurrentSection]);
+  }, [currentQuestionIndexInSection, getCurrentSection, getCurrentQuestion, getQuestionStatus, toast]);
 
   const navigateToPrevQuestion = useCallback(() => {
     if (currentQuestionIndexInSection > 0) {
@@ -135,6 +163,16 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
   }, [currentQuestionIndexInSection]);
 
   const navigateToNextSection = useCallback((): string | null => {
+    const currentSect = getCurrentSection();
+    if (currentSect && !areAllQuestionsInSectionAnswered(currentSect.id)) {
+         toast({
+            title: "Section Incomplete",
+            description: `Please answer all questions in section "${currentSect.title}" before proceeding.`,
+            variant: "destructive",
+          });
+        return currentSect.id; // Stay on current section
+    }
+
     const currentIdx = assessmentData.sections.findIndex(s => s.id === currentSectionId);
     if (currentIdx !== -1 && currentIdx < assessmentData.sections.length - 1) {
       const nextSection = assessmentData.sections[currentIdx + 1];
@@ -143,16 +181,16 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
       router.push(`/assessment/${nextSection.id}`);
       return nextSection.id;
     }
+    // If it's the last section, go to summary
     router.push('/assessment/summary');
     return null; 
-  }, [assessmentData.sections, currentSectionId, router]);
+  }, [assessmentData.sections, currentSectionId, router, getCurrentSection, areAllQuestionsInSectionAnswered, toast]);
 
   const navigateToPrevSection = useCallback((): string | null => {
     const currentIdx = assessmentData.sections.findIndex(s => s.id === currentSectionId);
     if (currentIdx > 0) {
       const prevSection = assessmentData.sections[currentIdx - 1];
       setCurrentSectionId(prevSection.id);
-      // Go to the last question of the previous section
       setCurrentQuestionIndexInSection(prevSection.questions.length - 1); 
       router.push(`/assessment/${prevSection.id}`);
       return prevSection.id;
@@ -160,14 +198,6 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     toast({ title: "You are at the first section."});
     return null;
   }, [assessmentData.sections, currentSectionId, router, toast]);
-
-
-  const getQuestionStatus = useCallback((questionId: string): 'answered' | 'skipped' | 'unanswered' => {
-    const answer = answers[questionId];
-    if (!answer || answer.value === null) return 'unanswered'; // Check for null value explicitly
-    if (answer.value === 'N/A') return 'skipped'; 
-    return 'answered';
-  }, [answers]);
 
   const calculateSectionScore = useCallback((sectionId: string) => {
     setAssessmentData(prevData => {
@@ -180,31 +210,25 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
 
       section.questions.forEach(q => {
         const answer = answers[q.id]; 
-        if (q.type === 'info_only') return; // Skip info_only questions for scoring
+        if (q.type === 'info_only') return;
 
-        if (answer && answer.value !== 'N/A' && answer.value !== null) {
+        if (answer && answer.value !== 'N/A' && answer.value !== null && answer.value !== '') {
           applicableQuestions++;
           const optionKey = answer.value as keyof HACTQuestion['options'];
           if (q.options && q.options[optionKey]) {
             totalPoints += q.options[optionKey]!.points;
           }
-        } else if (!answer || answer.value === null) {
-          // For unanswered questions that are not N/A and not info_only,
-          // HACT guidelines often treat them as high risk for overall assessment,
-          // but for section scoring based on *provided* answers, they don't add points.
-          // We can count them as applicable if they *should* have been answered.
-          applicableQuestions++; // Count as applicable if not N/A by design
+        } else if (!answer || answer.value === null || answer.value === '') {
+          // If question is mandatory (not N/A by design and not info_only) it counts as applicable
+          applicableQuestions++;
         }
       });
       
-      let riskScore = 0; // This is the numerical score (1-4) for the rating
-      let areaRiskRating: HACTSection['areaRiskRating'] = 'Low'; // Default text rating
+      let riskScore = 0; 
+      let areaRiskRating: HACTSection['areaRiskRating'] = 'Low'; 
 
       const thresholds = section.scoringLogic.ratingThresholds;
       if (thresholds.length > 0) {
-        // Default to the highest risk category if no lower bands are met
-        // Sort thresholds by score descending to pick highest applicable. More robust if thresholds overlap.
-        // However, HACT usually has distinct bands. Let's assume thresholds are ordered Low to High.
         const highestRiskThreshold = thresholds[thresholds.length - 1];
         riskScore = highestRiskThreshold.score; 
         areaRiskRating = highestRiskThreshold.rating;
@@ -215,15 +239,12 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
             areaRiskRating = threshold.rating;
             break; 
           }
-          // If only minPoints is defined (usually for High) and we haven't broken, it applies
           if (threshold.minPoints !== undefined && threshold.maxPoints === undefined && totalPoints >= threshold.minPoints) {
             riskScore = threshold.score;
             areaRiskRating = threshold.rating;
-            // Don't break, allow a more specific maxPoints later in a poorly ordered list
           }
         }
       }
-
 
       const currentSectionState = prevData.sections[sectionIndex];
       if (currentSectionState &&
@@ -231,7 +252,7 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
           currentSectionState.riskScore === riskScore &&
           currentSectionState.areaRiskRating === areaRiskRating &&
           currentSectionState.scoringLogic.totalApplicable === applicableQuestions) {
-        return prevData; // No change
+        return prevData;
       }
 
       const newSections = [...prevData.sections];
@@ -256,21 +277,17 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
         }
       });
       
-      // Example overall thresholds based on total points sum. These should be calibrated.
-      // Assuming more questions now, so thresholds are higher.
       let overallRiskRatingCalc: HACTAssessment['overallRiskRating'] = 'Low';
-      if (overallTotalRiskPoints >= 61) { // Adjusted example for more questions
+      if (overallTotalRiskPoints >= 61) { 
         overallRiskRatingCalc = 'High';
-      } else if (overallTotalRiskPoints >= 41) { // Adjusted example
+      } else if (overallTotalRiskPoints >= 41) { 
         overallRiskRatingCalc = 'Significant';
-      } else if (overallTotalRiskPoints >= 21) { // Adjusted example
+      } else if (overallTotalRiskPoints >= 21) { 
         overallRiskRatingCalc = 'Moderate';
       } else {
         overallRiskRatingCalc = 'Low';
       }
       
-      // The overall risk score in HACT can be complex (e.g. weighted average of section scores, or just the rating)
-      // For simplicity here, we'll use the total points as the "score" that determines the rating.
       const overallRiskScoreCalc = overallTotalRiskPoints; 
 
       if (
@@ -278,7 +295,7 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
         prevData.overallRiskScore === overallRiskScoreCalc &&
         prevData.overallRiskRating === overallRiskRatingCalc
       ) {
-        return prevData; // No change
+        return prevData;
       }
 
       return {
@@ -291,12 +308,8 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
   }, []); 
 
   const getRuleBasedRecommendation = useCallback((question: HACTQuestion, answer: Answer): string | null => {
-    // This function is now supplemented by the more detailed static recommendations in lib/recommendations.ts
-    // It can be kept for very specific, simple overrides if needed, or deprecated.
-    // For now, defer to the lib/recommendations.ts which is called directly in SummaryPage.
     return null; 
   }, []);
-
 
   const value: AssessmentContextState = {
     organizationName,
@@ -318,10 +331,8 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     calculateOverallScore,
     getRuleBasedRecommendation,
     resetAssessment,
+    areAllQuestionsInSectionAnswered, // Added
   };
 
   return <AssessmentContext.Provider value={value}>{children}</AssessmentContext.Provider>;
 };
-
-
-    

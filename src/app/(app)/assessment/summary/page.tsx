@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { generateHACTRecommendationAction } from '@/app/actions';
-import type { HACTQuestion, Answer, HACTQuestionOption } from '@/types'; // Added HACTQuestionOption
-import { Loader2, Download, Printer, RotateCcw, AlertTriangle, CheckCircle2, HelpCircle, FileText } from 'lucide-react';
+import type { HACTQuestion, Answer, HACTQuestionOption } from '@/types';
+import { Loader2, FileText, Printer, RotateCcw, AlertTriangle, CheckCircle2, HelpCircle } from 'lucide-react'; // Replaced Download with FileText
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge'; 
 import { getStaticRecommendation } from '@/lib/recommendations';
@@ -55,8 +55,6 @@ export default function SummaryPage() {
     for (const section of assessmentData.sections) {
       for (const question of section.questions) {
         const answer = answers[question.id];
-        // Generate recommendation if answer is "No", or if "Yes" but still high/significant risk,
-        // or if it's a text_input/yes_no_explain with substantive explanation and moderate+ risk
         
         let shouldGenerateRecommendation = false;
         const risk = question.options?.[answer?.value as 'Yes'|'No']?.riskAssessment || 'N/A';
@@ -79,9 +77,7 @@ export default function SummaryPage() {
           let isAIR = false;
 
           const fullUserAnswer = `${answer.value}${answer.explanation ? (': ' + answer.explanation) : ''}`;
-
-          // Conditions for AI: High/Significant risk primarily, or Moderate risk with detailed explanation.
-          // Also, if static recommendation is very generic or absent for a key non-low risk question.
+          
           const requiresDetailedAIR = (risk === 'High' || risk === 'Significant') || 
                                       (risk === 'Moderate' && answer.explanation && answer.explanation.length > 20) ||
                                       (question.isKeyQuestion && risk !== 'Low' && (!recText || recText.length < 100));
@@ -99,7 +95,7 @@ export default function SummaryPage() {
               if (aiResult.recommendation) {
                 recText = aiResult.recommendation;
                 isAIR = true;
-              } else if (!recText) { // Fallback if AI fails and no static rec
+              } else if (!recText) { 
                  toast({ title: "AI Recommendation Note", description: `AI could not generate a detailed tip for "${question.text.substring(0,30)}...". Using standard guidance if available.`, variant: "default" });
               }
             } catch (error) {
@@ -120,7 +116,7 @@ export default function SummaryPage() {
         }
       }
     }
-    setRecommendations(allRecs.sort((a, b) => { // Sort by risk: High, Significant, Moderate
+    setRecommendations(allRecs.sort((a, b) => { 
       const riskOrder = { 'High': 1, 'Significant': 2, 'Moderate': 3, 'Low': 4, 'N/A': 5 };
       return (riskOrder[a.risk as keyof typeof riskOrder] || 5) - (riskOrder[b.risk as keyof typeof riskOrder] || 5);
     }));
@@ -139,6 +135,12 @@ export default function SummaryPage() {
   }
 
   const handlePrintOrDownload = () => {
+    // This function uses the browser's built-in print functionality.
+    // To "Download as PDF", users typically select "Save as PDF" or "Microsoft Print to PDF"
+    // (or a similar option depending on their OS/browser) in the print dialog that appears.
+    // For a more direct PDF download without a print dialog, a dedicated PDF generation library 
+    // (e.g., jsPDF, pdfmake on the client-side, or a server-side solution) would be required,
+    // which is a more complex implementation.
     window.print();
   };
   
@@ -236,7 +238,7 @@ export default function SummaryPage() {
                                   questionRisk = riskOpt;
                                   questionRiskClasses = getRiskColorClasses(riskOpt);
                                 } else if (answerValue === 'Not Answered' && q.type !== 'info_only') {
-                                  questionRisk = 'High'; // Default for unanswered, actionable questions
+                                  questionRisk = 'High'; 
                                   questionRiskClasses = getRiskColorClasses('High');
                                 }
 
@@ -314,6 +316,3 @@ export default function SummaryPage() {
     </div>
   );
 }
-
-
-    
