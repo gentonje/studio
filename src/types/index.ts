@@ -1,4 +1,5 @@
 
+
 export interface HACTQuestionOption {
   riskAssessment: 'Low' | 'Moderate' | 'Significant' | 'High' | 'N/A';
   points: number;
@@ -24,12 +25,12 @@ export interface HACTQuestion {
 
 export interface HACTSectionScoringLogic {
   totalQuestions: number;
-  totalApplicableQuestions: number; // From HACT document, used as denominator for average
+  totalApplicableQuestions: number; 
   totalKey: number;
-  ratingThresholds: Array<{ // Thresholds for AVERAGE risk points per question
-    maxAverageScore?: number; // Upper bound for the average score for this rating
-    minAverageScore?: number; // Lower bound for the average score for this rating
-    numericScore: number; // The 1-4 score (Low=1, Mod=2, Sig=3, High=4)
+  ratingThresholds: Array<{ 
+    minAverageScore?: number; 
+    maxAverageScore?: number; 
+    numericScore: number; 
     rating: 'Low' | 'Moderate' | 'Significant' | 'High';
   }>;
 }
@@ -40,20 +41,20 @@ export interface HACTSection {
   responsibleDepartment: string;
   questions: HACTQuestion[];
   scoringLogic: HACTSectionScoringLogic;
-  totalRiskPoints?: number; // Sum of points from answers
-  averageRiskScore?: number; // totalRiskPoints / totalApplicableQuestions
-  numericRiskScore?: number; // 1-4 score based on averageRiskScore and thresholds
-  areaRiskRating?: 'Low' | 'Moderate' | 'Significant' | 'High'; // Derived from averageRiskScore
+  totalRiskPoints?: number; 
+  averageRiskScore?: number; 
+  numericRiskScore?: number; 
+  areaRiskRating?: 'Low' | 'Moderate' | 'Significant' | 'High'; 
 }
 
 export interface HACTAssessment {
   assessmentTitle: string;
   sections: HACTSection[];
-  overallTotalRiskPoints?: number; // Sum of all section totalRiskPoints
-  overallAverageRiskScore?: number; // overallTotalRiskPoints / totalApplicableQuestionsOverall
-  overallNumericRiskScore?: number; // 1-4 score based on overallAverageRiskScore
-  overallRiskRating?: 'Low' | 'Moderate' | 'Significant' | 'High'; // Derived from overallAverageRiskScore
-  overallRatingThresholds?: HACTSectionScoringLogic['ratingThresholds']; // Global thresholds for overall assessment average
+  overallTotalRiskPoints?: number; 
+  overallAverageRiskScore?: number; 
+  overallNumericRiskScore?: number; 
+  overallRiskRating?: 'Low' | 'Moderate' | 'Significant' | 'High'; 
+  overallRatingThresholds?: HACTSectionScoringLogic['ratingThresholds']; 
 }
 
 export interface Answer {
@@ -75,14 +76,15 @@ export interface AssessmentContextState {
   answerQuestion: (questionId: string, value: Answer['value'], explanation?: string) => void;
   navigateToNextQuestion: () => void;
   navigateToPrevQuestion: () => void;
-  navigateToNextSection: () => string | null; // Returns next section ID or null if summary
-  navigateToPrevSection: () => string | null; // Returns prev section ID or null if first
+  navigateToNextSection: () => string | null; 
+  navigateToPrevSection: () => string | null; 
   getCurrentSection: () => HACTSection | undefined;
   getCurrentQuestion: () => HACTQuestion | undefined;
-  getQuestionStatus: (questionId: string) => 'answered' | 'skipped' | 'unanswered';
+  getQuestionStatus: (questionId: string) => 'answered' | 'unanswered'; // N/A is considered 'answered' for navigation
   calculateSectionScore: (sectionId: string) => void;
   calculateOverallScore: () => void;
-  getRuleBasedRecommendation: (question: HACTQuestion, answer: Answer) => string | null;
   resetAssessment: () => void;
   areAllQuestionsInSectionAnswered: (sectionId: string) => boolean;
 }
+
+```

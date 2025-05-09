@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useRef } from 'react'; 
+import React, { useEffect, useRef, useState } from 'react'; 
 import { useRouter } from 'next/navigation';
 import { useAssessment } from '@/hooks/useAssessment';
 import { Button } from '@/components/ui/button';
@@ -32,23 +32,23 @@ export default function SummaryPage() {
     answers,
     calculateOverallScore,
     calculateSectionScore, 
-    resetAssessment 
+    resetAssessment,
+    getQuestionStatus 
   } = useAssessment();
 
-  const [recommendations, setRecommendations] = React.useState<RecommendationItem[]>([]);
-  const [isLoadingRecs, setIsLoadingRecs] = React.useState(false);
+  const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
+  const [isLoadingRecs, setIsLoadingRecs] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!organizationName) {
       router.push('/');
     } else {
-      // Ensure scores are calculated when summary page loads
       assessmentData.sections.forEach(section => calculateSectionScore(section.id));
       calculateOverallScore();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizationName, router]); // Removed assessmentData, answers, calculateSectionScore, calculateOverallScore to prevent loop, orgName is sufficient trigger
+  }, [organizationName, router, assessmentData.sections]); 
 
   const fetchRecommendations = async () => {
     setIsLoadingRecs(true);
@@ -58,11 +58,19 @@ export default function SummaryPage() {
       for (const question of section.questions) {
         const answer = answers[question.id];
         
+        if (getQuestionStatus(question.id) === 'unanswered' && question.type !== 'info_only') {
+            toast({
+                title: "Missing Answer for Recommendation",
+                description: `Question ${question.id} ("${question.text.substring(0,30)}...") in section "${section.title}" was not answered. Skipping recommendation.`,
+                variant: "default"
+            });
+            continue; 
+        }
+        
         let shouldGenerateRecommendation = false;
-        // Determine risk based on the answer; if N/A, risk is N/A.
         const risk = answer?.value === 'N/A' ? 'N/A' : (question.options?.[answer?.value as 'Yes'|'No']?.riskAssessment || 'N/A');
 
-        if (answer && answer.value !== 'N/A') { // Only generate for non-N/A answers
+        if (answer && answer.value !== 'N/A') { 
           if (answer.value === "No") {
             shouldGenerateRecommendation = true;
           } else if (answer.value === "Yes" && (risk === "Significant" || risk === "High")) {
@@ -90,10 +98,10 @@ export default function SummaryPage() {
               const aiResult = await generateHACTRecommendationAction({
                 questionText: question.text,
                 userAnswer: fullUserAnswer,
-                riskAssessment: risk, // This is the string like 'Low', 'Moderate'
+                riskAssessment: risk,
                 idealState: question.options?.Yes 
-                    ? `The ideal state involves CMS demonstrating practices aligned with a 'Yes' answer, including robust policies, procedures, and controls that effectively mitigate risks related to "${question.text}". For example, having ${question.options.Yes.defaultExplanationPlaceholder || 'well-documented evidence and consistent application of best practices'}.`
-                    : `The ideal state for "${question.text}" involves CMS having documented procedures, policies, and controls in place aligned with UN HACT requirements and best practices for managing donor funds effectively, thereby minimizing risks.`, 
+                    ? `The ideal state involves Community Health Services (CMS) demonstrating practices aligned with a 'Yes' answer, including robust policies, procedures, and controls that effectively mitigate risks related to "${question.text}". For example, having ${question.options.Yes.defaultExplanationPlaceholder || 'well-documented evidence and consistent application of best practices'}.`
+                    : `The ideal state for "${question.text}" involves Community Health Services (CMS) having documented procedures, policies, and controls in place aligned with UN HACT requirements and best practices for managing donor funds effectively, thereby minimizing risks.`, 
               });
               if (aiResult.recommendation) {
                 recText = aiResult.recommendation;
@@ -128,11 +136,11 @@ export default function SummaryPage() {
   };
   
   useEffect(() => {
-      if (organizationName && assessmentData.sections.length > 0) { // ensure assessmentData is populated
+      if (organizationName && assessmentData.sections.length > 0) { 
           fetchRecommendations();
       }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizationName, assessmentData, answers]); // Depend on assessmentData and answers
+  }, [organizationName, assessmentData, answers]); 
 
   if (!organizationName || !assessmentData || assessmentData.sections.length === 0) {
     return <div className="flex items-center justify-center min-h-[calc(100vh-200px)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="ml-4 text-lg">Loading summary...</p></div>;
@@ -140,16 +148,39 @@ export default function SummaryPage() {
 
   const handlePrintOrDownload = () => {
     const printContents = reportRef.current?.innerHTML;
-    const originalContents = document.body.innerHTML;
-
     if (printContents) {
-      // Temporarily replace body content for printing
-      // This is a common workaround but can have side effects on complex pages.
-      // Consider a dedicated print view or library for more robust PDF generation.
-      document.body.innerHTML = `<div class="print-summary-report">${printContents}</div>`;
-      window.print();
-      document.body.innerHTML = originalContents; // Restore original content
-      window.location.reload(); // Reload to restore JS event listeners and state if necessary
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write('<html><head><title>HACT Assessment Report for Community Health Services (CMS)</title>');
+        const styles = Array.from(document.styleSheets)
+          .map(styleSheet => {
+            try {
+              return Array.from(styleSheet.cssRules)
+                .map(rule => rule.cssText)
+                .join('');
+            } catch (e) {
+              console.warn('Could not read CSS rules from stylesheet:', styleSheet.href, e);
+              return '';
+            }
+          })
+          .join('');
+        printWindow.document.write(`<style>${styles} @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }</style>`);
+        printWindow.document.write('</head><body>');
+        printWindow.document.write(`<div class="print-summary-report">${printContents}</div>`);
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        
+        // Delay print to ensure all content and styles are loaded
+        // Some browsers might need this, especially if styles are complex or content is dynamic
+        setTimeout(() => {
+            printWindow.focus(); // Focus is important for some browsers to trigger print dialog
+            printWindow.print();
+            // Optional: printWindow.close(); // Consider user experience, some might want to keep it open
+        }, 1000); // Increased delay for potentially complex reports
+
+      } else {
+        toast({ title: "Print Error", description: "Could not open print window. Please check your browser's pop-up settings.", variant: "destructive"});
+      }
     } else {
         toast({ title: "Print Error", description: "Could not get report content for printing.", variant: "destructive"});
     }
@@ -157,28 +188,28 @@ export default function SummaryPage() {
   
   const getRiskColorClasses = (rating?: 'Low' | 'Moderate' | 'Significant' | 'High' | 'N/A') => {
     switch (rating) {
-      case 'Low': return 'text-green-700 bg-green-100 border-green-300';
-      case 'Moderate': return 'text-yellow-700 bg-yellow-100 border-yellow-300';
-      case 'Significant': return 'text-orange-700 bg-orange-100 border-orange-300';
-      case 'High': return 'text-red-700 bg-red-100 border-red-300';
-      default: return 'text-gray-700 bg-gray-100 border-gray-300';
+      case 'Low': return 'text-green-700 bg-green-100 border-green-300 dark:text-green-300 dark:bg-green-900/50 dark:border-green-700';
+      case 'Moderate': return 'text-yellow-700 bg-yellow-100 border-yellow-300 dark:text-yellow-300 dark:bg-yellow-900/50 dark:border-yellow-700';
+      case 'Significant': return 'text-orange-700 bg-orange-100 border-orange-300 dark:text-orange-300 dark:bg-orange-900/50 dark:border-orange-700';
+      case 'High': return 'text-red-700 bg-red-100 border-red-300 dark:text-red-300 dark:bg-red-900/50 dark:border-red-700';
+      default: return 'text-gray-700 bg-gray-100 border-gray-300 dark:text-gray-300 dark:bg-gray-700/50 dark:border-gray-600';
     }
   };
   
    const getRiskIcon = (rating?: 'Low' | 'Moderate' | 'Significant' | 'High' | 'N/A') => {
     switch (rating) {
-      case 'Low': return <CheckCircle2 className="h-5 w-5 text-green-600" />;
-      case 'Moderate': return <HelpCircle className="h-5 w-5 text-yellow-600" />; 
-      case 'Significant': return <AlertTriangle className="h-5 w-5 text-orange-600" />;
-      case 'High': return <AlertTriangle className="h-5 w-5 text-red-600" />; 
-      default: return <HelpCircle className="h-5 w-5 text-gray-600" />;
+      case 'Low': return <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />;
+      case 'Moderate': return <HelpCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />; 
+      case 'Significant': return <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />;
+      case 'High': return <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />; 
+      default: return <HelpCircle className="h-5 w-5 text-gray-600 dark:text-gray-400" />;
     }
   };
 
 
   return (
     <div className="max-w-5xl mx-auto py-8">
-      <div ref={reportRef} className="print-summary-report"> {/* This div will be targeted for printing */}
+      <div ref={reportRef} className="print-summary-report"> 
         <Card className="shadow-xl">
           <CardHeader className="bg-primary text-primary-foreground p-6 rounded-t-lg">
             <CardTitle className="text-3xl md:text-4xl">HACT Micro-Assessment Summary Report</CardTitle>
@@ -215,8 +246,8 @@ export default function SummaryPage() {
               <CardContent>
                 <Accordion type="multiple" className="w-full" defaultValue={assessmentData.sections.map(s => s.id)}>
                   {assessmentData.sections.map((section) => (
-                    <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-3 overflow-hidden">
-                      <AccordionTrigger className={`text-lg font-semibold hover:bg-muted/50 p-4 data-[state=open]:bg-muted/60 ${getRiskColorClasses(section.areaRiskRating)}`}>
+                    <AccordionItem value={section.id} key={section.id} className="border rounded-md mb-3 overflow-hidden dark:border-gray-700">
+                      <AccordionTrigger className={`text-lg font-semibold hover:bg-muted/50 p-4 data-[state=open]:bg-muted/60 ${getRiskColorClasses(section.areaRiskRating)} dark:hover:bg-muted/20 dark:data-[state=open]:bg-muted/30`}>
                         <div className="flex items-center justify-between w-full">
                           <span>{section.title}</span>
                           <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getRiskColorClasses(section.areaRiskRating)}`}>
@@ -224,8 +255,8 @@ export default function SummaryPage() {
                           </span>
                         </div>
                       </AccordionTrigger>
-                      <div className="accordion-content-wrapper"> {/* Wrapper for print styling */}
-                        <AccordionContent className="p-4 space-y-4 text-base border-t bg-background">
+                      <div className="accordion-content-wrapper"> 
+                        <AccordionContent className="p-4 space-y-4 text-base border-t bg-background dark:bg-card dark:border-gray-700">
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-sm">
                               <p><strong>Total Risk Points:</strong> {section.totalRiskPoints?.toFixed(0) ?? 'N/A'}</p>
                               <p><strong>Avg. Risk Score:</strong> {section.averageRiskScore?.toFixed(2) ?? 'N/A'}</p>
@@ -235,10 +266,10 @@ export default function SummaryPage() {
                           </div>
                           
                           {section.questions.length > 0 && (
-                            <div className="mt-4 pt-4 border-t">
+                            <div className="mt-4 pt-4 border-t dark:border-gray-700">
                               <h4 className="text-md font-semibold mb-3 text-foreground">Questions in this Section:</h4>
                               <ul className="space-y-3">
-                                {section.questions.map((q, qIndex) => {
+                                {section.questions.map((q) => {
                                   const userAnswer = answers[q.id];
                                   const answerValue = userAnswer?.value ?? 'Not Answered';
                                   const answerExplanation = userAnswer?.explanation;
@@ -248,36 +279,44 @@ export default function SummaryPage() {
                                   let questionRiskClasses = getRiskColorClasses('N/A');
 
                                   if (userAnswer && q.options && userAnswer.value) {
-                                    const optionDetails = q.options[userAnswer.value as 'Yes'|'No'|'N/A'];
-                                    if (optionDetails) {
-                                      questionRiskRating = optionDetails.riskAssessment;
-                                      questionRiskPoints = optionDetails.points;
-                                      questionRiskClasses = getRiskColorClasses(optionDetails.riskAssessment);
+                                    if (userAnswer.value === 'N/A' && q.options['N/A']) {
+                                        questionRiskRating = q.options['N/A'].riskAssessment;
+                                        questionRiskPoints = q.options['N/A'].points;
+                                        questionRiskClasses = getRiskColorClasses(q.options['N/A'].riskAssessment);
+                                    } else {
+                                        const optionDetails = q.options[userAnswer.value as 'Yes'|'No'];
+                                        if (optionDetails) {
+                                          questionRiskRating = optionDetails.riskAssessment;
+                                          questionRiskPoints = optionDetails.points;
+                                          questionRiskClasses = getRiskColorClasses(optionDetails.riskAssessment);
+                                        }
                                     }
                                   } else if (answerValue === 'Not Answered' && q.type !== 'info_only') {
-                                    questionRiskRating = 'High'; // Assuming un-answered is high risk
-                                    questionRiskPoints = q.options?.No?.points || q.options?.Yes?.points || 0; // Default to some points or handle as needed
+                                    questionRiskRating = 'High'; // Assume highest risk for unanswered
+                                    // Find points for highest risk option (usually 'No' or a default if No isn't present)
+                                    questionRiskPoints = q.options?.No?.points || q.options?.Yes?.points || (q.isKeyQuestion ? 8 : 4) ; 
                                     questionRiskClasses = getRiskColorClasses('High');
                                   }
 
                                   if (q.type === 'info_only') return (
-                                    <li key={`${section.id}-q-${q.id}`} className="p-3 border rounded-md bg-blue-50 text-blue-700 shadow-sm">
-                                      <p className="font-medium text-primary">{q.id}. {q.text}</p>
+                                    <li key={`${section.id}-q-${q.id}`} className="p-3 border rounded-md bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700 shadow-sm">
+                                      <p className="font-medium text-primary dark:text-primary-light">{q.id}. {q.text}</p>
                                       <p className="text-sm mt-1 italic">{q.infoContent || "Informational item."}</p>
                                     </li>
                                   );
 
                                   return (
-                                    <li key={`${section.id}-q-${q.id}`} className={`p-3 border rounded-md shadow-sm ${answerValue === 'Not Answered' ? 'bg-gray-50' : 'bg-background'}`}>
-                                      <p className="font-medium text-primary">{q.id}. {q.text}</p>
+                                    <li key={`${section.id}-q-${q.id}`} className={`p-3 border rounded-md shadow-sm ${answerValue === 'Not Answered' ? 'bg-gray-50 dark:bg-gray-800' : 'bg-background dark:bg-card'} dark:border-gray-700`}>
+                                      <p className="font-medium text-primary dark:text-primary-light">{q.id}. {q.text}</p>
                                       <p className="text-sm text-muted-foreground mt-1">
                                         CMS Answer: <span className="font-semibold">{answerValue}</span>
                                         {answerExplanation && <span className="text-xs block pl-4 italic mt-0.5">Explanation: {answerExplanation}</span>}
-                                        {answerValue === 'Not Answered' && <Badge variant="outline" className="ml-2 border-destructive text-destructive">Not Answered</Badge>}
+                                        {answerValue === 'Not Answered' && <Badge variant="outline" className="ml-2 border-destructive text-destructive dark:border-red-500 dark:text-red-400">Not Answered</Badge>}
                                       </p>
                                       <p className={`text-sm mt-1`}>
                                         Assessed Risk: <Badge variant="outline" className={`px-2 py-0.5 text-xs ${questionRiskClasses.split(' ')[0]} ${questionRiskClasses.split(' ')[1]} border-current`}>{questionRiskRating}</Badge>
-                                        {answerValue !== 'N/A' && ` (Points: ${questionRiskPoints})`}
+                                        {(answerValue !== 'N/A' && answerValue !== 'Not Answered') && ` (Points: ${questionRiskPoints})`}
+                                        {answerValue === 'Not Answered' && ` (Assumed Points: ${questionRiskPoints})`}
                                       </p>
                                     </li>
                                   );
@@ -300,18 +339,18 @@ export default function SummaryPage() {
               </CardHeader>
               <CardContent>
                 {isLoadingRecs && <div className="flex items-center justify-center p-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-3 text-lg">Generating tailored recommendations for CMS...</p></div>}
-                {!isLoadingRecs && recommendations.length === 0 && <p className="text-muted-foreground">No specific recommendations generated, or all areas are assessed as low risk.</p>}
+                {!isLoadingRecs && recommendations.length === 0 && <p className="text-muted-foreground">No specific recommendations generated, or all areas are assessed as low risk. Ensure all applicable questions were answered.</p>}
                 {!isLoadingRecs && recommendations.length > 0 && (
                   <ul className="space-y-6">
                     {recommendations.map((rec, index) => (
-                      <li key={`${rec.questionId}-${index}`} className="p-4 border rounded-lg shadow-sm bg-background hover:shadow-md transition-shadow">
-                        <h4 className="font-semibold text-primary text-lg mb-1">{rec.questionId}. {rec.questionText}</h4>
+                      <li key={`${rec.questionId}-${index}`} className="p-4 border rounded-lg shadow-sm bg-background hover:shadow-md transition-shadow dark:bg-card dark:border-gray-700 dark:hover:shadow-primary/20">
+                        <h4 className="font-semibold text-primary dark:text-primary-light text-lg mb-1">{rec.questionId}. {rec.questionText}</h4>
                         <p className="text-sm text-muted-foreground mb-2">CMS Answer: <span className="font-medium">{rec.userAnswer}</span> (Risk: <span className={`font-medium ${getRiskColorClasses(rec.risk as any).split(' ')[0]}`}>{rec.risk}</span>)</p>
-                        <div className="mt-2 text-foreground prose prose-sm max-w-none prose-headings:text-primary prose-strong:text-foreground">
+                        <div className="mt-2 text-foreground prose prose-sm max-w-none prose-headings:text-primary prose-strong:text-foreground dark:prose-invert dark:prose-headings:text-primary-light dark:prose-strong:text-foreground">
                           <strong className="text-lg block mb-1">Recommendation for CMS:</strong>
                           <div dangerouslySetInnerHTML={{ __html: rec.recommendation.replace(/\n\n/g, '<br/><br/>').replace(/\n/g, '<br />') }} />
                         </div>
-                        {rec.isAIR && <Badge variant="outline" className="mt-3 border-accent text-accent bg-accent/10 flex items-center gap-1.5"><BrainCircuit size={14} /> AI Enhanced Detailed Guidance</Badge>}
+                        {rec.isAIR && <Badge variant="outline" className="mt-3 border-accent text-accent bg-accent/10 flex items-center gap-1.5 dark:border-accent-dark dark:text-accent-dark dark:bg-accent-dark/20"><BrainCircuit size={14} /> AI Enhanced Detailed Guidance</Badge>}
                       </li>
                     ))}
                   </ul>
@@ -322,15 +361,12 @@ export default function SummaryPage() {
         </Card>
       </div> {/* End of reportRef div */}
 
-      <CardFooter className="p-6 border-t flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-3 no-print">
+      <CardFooter className="p-6 border-t flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-3 no-print dark:border-gray-700">
         <Button variant="outline" onClick={resetAssessment}>
           <RotateCcw className="mr-2 h-4 w-4" /> Start New Assessment
         </Button>
-        <Button variant="outline" onClick={handlePrintOrDownload}>
-          <Printer className="mr-2 h-4 w-4" /> Print Report
-        </Button>
-        <Button onClick={handlePrintOrDownload}> {/* This button essentially does the same as print for now */}
-          <FileText className="mr-2 h-4 w-4" /> Download as PDF
+        <Button variant="default" onClick={handlePrintOrDownload}>
+          <Printer className="mr-2 h-4 w-4" /> Print / Download PDF
         </Button>
       </CardFooter>
     </div>

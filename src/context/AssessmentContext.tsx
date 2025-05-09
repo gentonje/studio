@@ -26,7 +26,6 @@ const defaultState: AssessmentContextState = {
   getQuestionStatus: () => 'unanswered',
   calculateSectionScore: () => {},
   calculateOverallScore: () => {},
-  getRuleBasedRecommendation: () => null,
   resetAssessment: () => {},
   areAllQuestionsInSectionAnswered: () => false,
 };
@@ -58,23 +57,43 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
         setCurrentSectionId(parsedState.currentSectionId || null);
         setCurrentQuestionIndexInSection(parsedState.currentQuestionIndexInSection || 0);
         setAnswers(parsedState.answers || {});
-        // Ensure assessmentData loaded from storage is deeply compared or re-initialized if structure changed
+        
         const loadedAssessmentData = parsedState.assessmentData || JSON.parse(JSON.stringify(initialAssessmentData));
-        // A simple check: if loaded data has fewer sections than initial, it might be old.
-        if (loadedAssessmentData.sections.length < initialAssessmentData.sections.length) {
-             setAssessmentData(JSON.parse(JSON.stringify(initialAssessmentData)));
+        // Basic validation: check if sections exist and match somewhat with initial data structure
+        if (loadedAssessmentData.sections && loadedAssessmentData.sections.length > 0 && 
+            initialAssessmentData.sections.every(initSection => 
+                loadedAssessmentData.sections.find((loadedSection: HACTSection) => loadedSection.id === initSection.id)
+            )
+        ) {
+            // If structure seems fine, merge answers into potentially updated question structures
+            const mergedAssessmentData = JSON.parse(JSON.stringify(initialAssessmentData)); // Start with fresh template
+            mergedAssessmentData.sections.forEach((section: HACTSection) => {
+                const loadedSection = loadedAssessmentData.sections.find((ls: HACTSection) => ls.id === section.id);
+                if (loadedSection) {
+                    section.totalRiskPoints = loadedSection.totalRiskPoints;
+                    section.averageRiskScore = loadedSection.averageRiskScore;
+                    section.numericRiskScore = loadedSection.numericRiskScore;
+                    section.areaRiskRating = loadedSection.areaRiskRating;
+                }
+            });
+            mergedAssessmentData.overallTotalRiskPoints = loadedAssessmentData.overallTotalRiskPoints;
+            mergedAssessmentData.overallAverageRiskScore = loadedAssessmentData.overallAverageRiskScore;
+            mergedAssessmentData.overallNumericRiskScore = loadedAssessmentData.overallNumericRiskScore;
+            mergedAssessmentData.overallRiskRating = loadedAssessmentData.overallRiskRating;
+
+            setAssessmentData(mergedAssessmentData);
         } else {
-            setAssessmentData(loadedAssessmentData);
+            setAssessmentData(JSON.parse(JSON.stringify(initialAssessmentData)));
         }
+
       } else {
-        // If no saved state, ensure initialAssessmentData is used.
         setAssessmentData(JSON.parse(JSON.stringify(initialAssessmentData)));
       }
     } catch (error) {
       console.error("Failed to load state from local storage:", error);
-      setAssessmentData(JSON.parse(JSON.stringify(initialAssessmentData))); // Fallback to initial data on error
+      setAssessmentData(JSON.parse(JSON.stringify(initialAssessmentData))); 
     }
-  }, []);
+  }, []); // Load once on mount
 
   useEffect(() => {
     try {
@@ -97,7 +116,7 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
   }, []);
 
   const startAssessment = useCallback((data: HACTAssessment, firstSectionId: string) => {
-    const freshAssessmentData = JSON.parse(JSON.stringify(data)); // Use a deep copy of the provided data
+    const freshAssessmentData = JSON.parse(JSON.stringify(data)); 
     setAssessmentData(freshAssessmentData); 
     setCurrentSectionId(firstSectionId);
     setCurrentQuestionIndexInSection(0);
@@ -110,7 +129,7 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     setCurrentSectionId(null);
     setCurrentQuestionIndexInSection(0);
     setAnswers({});
-    setAssessmentData(JSON.parse(JSON.stringify(initialAssessmentData))); // Reset with fresh initial data
+    setAssessmentData(JSON.parse(JSON.stringify(initialAssessmentData))); 
     localStorage.removeItem(LOCAL_STORAGE_KEY);
     router.push('/');
   }, [router]);
@@ -131,14 +150,39 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     }));
   }, []);
 
- const getQuestionStatus = useCallback((questionId: string): 'answered' | 'skipped' | 'unanswered' => {
+ const getQuestionStatus = useCallback((questionId: string): 'answered' | 'unanswered' => {
     const answer = answers[questionId];
-    if (!answer || answer.value === null || answer.value === '') return 'unanswered';
-    // N/A is a valid answer for some questions and means it's "answered" or "skipped" from a completion PoV
-    // but it means the question is not applicable for scoring.
-    if (answer.value === 'N/A') return 'skipped'; 
-    return 'answered';
-  }, [answers]);
+    const question = assessmentData.sections.flatMap(s => s.questions).find(q => q.id === questionId);
+
+    if (!answer || answer.value === null || answer.value === '') {
+        return 'unanswered';
+    }
+    
+    // For 'yes_no_na', 'N/A' is a valid answer.
+    if (question?.type === 'yes_no_na' && answer.value === 'N/A') {
+        return 'answered'; 
+    }
+    
+    // For 'yes_no_explain' and 'yes_no_multi_explain', if 'Yes' or 'No' is selected, it's answered
+    // The explanation part might be optional for just being 'answered' from a navigation perspective,
+    // but could be mandatory for proceeding based on specific question logic.
+    // For now, if a value is selected (Yes/No), it's considered answered.
+    if ((question?.type === 'yes_no_explain' || question?.type === 'yes_no_multi_explain') && (answer.value === 'Yes' || answer.value === 'No')) {
+        return 'answered';
+    }
+
+    // For text_input, any non-empty string means it's answered.
+    if (question?.type === 'text_input' && typeof answer.value === 'string' && answer.value.trim() !== '') {
+        return 'answered';
+    }
+    
+    // If it's not 'info_only' and has a value that's not just an empty string (for text inputs that might default to ""), it's answered.
+    if (question?.type !== 'info_only' && answer.value !== null && (typeof answer.value !== 'string' || answer.value.trim() !== '')) {
+        return 'answered';
+    }
+    
+    return 'unanswered';
+  }, [answers, assessmentData.sections]);
 
   const areAllQuestionsInSectionAnswered = useCallback((targetSectionId: string): boolean => {
     const sectionToCheck = assessmentData.sections.find(s => s.id === targetSectionId);
@@ -147,22 +191,23 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     for (const q of sectionToCheck.questions) {
       if (q.type === 'info_only') continue; 
       const status = getQuestionStatus(q.id);
-      // "Skipped" (answered as N/A) is considered complete for navigation.
-      // The critical part is that an actual selection (Yes, No, or N/A if available) was made.
       if (status === 'unanswered') {
+        toast({
+          title: "Question Unanswered",
+          description: `Please answer question ${q.id} ("${q.text.substring(0, 50)}...") in section "${sectionToCheck.title}" to proceed.`,
+          variant: "destructive",
+        });
         return false;
       }
     }
     return true;
-  }, [assessmentData.sections, getQuestionStatus]);
+  }, [assessmentData.sections, getQuestionStatus, toast]);
 
   const navigateToNextQuestion = useCallback(() => {
     const section = getCurrentSection();
     const currentQ = getCurrentQuestion();
 
     if (currentQ && currentQ.type !== 'info_only') {
-        // Check if an answer has been provided.
-        // N/A is a valid answer if the question supports it.
         const status = getQuestionStatus(currentQ.id);
         if (status === 'unanswered') {
              toast({
@@ -189,11 +234,7 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
   const navigateToNextSection = useCallback((): string | null => {
     const currentSect = getCurrentSection();
     if (currentSect && !areAllQuestionsInSectionAnswered(currentSect.id)) {
-         toast({
-            title: "Section Incomplete",
-            description: `Please answer all questions in section "${currentSect.title}" before proceeding.`,
-            variant: "destructive",
-          });
+        // Toast is handled by areAllQuestionsInSectionAnswered now
         return currentSect.id; 
     }
 
@@ -205,8 +246,15 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
       router.push(`/assessment/${nextSection.id}`);
       return nextSection.id;
     }
-    router.push('/assessment/summary');
-    return null; 
+    // If it's the last section, navigate to summary
+    if (currentIdx === assessmentData.sections.length - 1) {
+        router.push('/assessment/summary');
+        return null; // Indicates navigation to summary
+    }
+    
+    // Fallback if something unexpected happens
+    toast({ title: "Navigation Error", description: "Could not determine next section."});
+    return currentSectionId; 
   }, [assessmentData.sections, currentSectionId, router, getCurrentSection, areAllQuestionsInSectionAnswered, toast]);
 
   const navigateToPrevSection = useCallback((): string | null => {
@@ -214,7 +262,6 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     if (currentIdx > 0) {
       const prevSection = assessmentData.sections[currentIdx - 1];
       setCurrentSectionId(prevSection.id);
-      // Navigate to the last question of the previous section
       setCurrentQuestionIndexInSection(prevSection.questions.length - 1); 
       router.push(`/assessment/${prevSection.id}`);
       return prevSection.id;
@@ -230,83 +277,92 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
       
       const section = prevData.sections[sectionIndex];
       let totalPoints = 0;
-      let actualApplicableQuestionsCount = 0; // Count questions that received a scoreable answer (not N/A)
+      let questionsAnsweredForScoring = 0; 
 
       section.questions.forEach(q => {
         const answer = answers[q.id]; 
         if (q.type === 'info_only') return;
 
         if (answer && answer.value !== null && answer.value !== '') {
-            if (answer.value === 'N/A') {
-                // N/A answers contribute 0 points and don't count towards actualApplicableQuestionsCount for avg calculation
+            if (answer.value === 'N/A' && q.options?.['N/A']) {
+                totalPoints += q.options['N/A'].points; // N/A option usually has 0 points
+                // N/A answers are typically excluded from the average calculation denominator
+                // if the denominator is dynamic (questionsContributingToAverage).
+                // For HACT's fixed "totalApplicableQuestions", they are included.
             } else {
-                actualApplicableQuestionsCount++;
                 const optionKey = answer.value as keyof HACTQuestion['options'];
                 if (q.options && q.options[optionKey]) {
                     totalPoints += q.options[optionKey]!.points;
+                    questionsAnsweredForScoring++;
                 }
             }
         } else {
-           // Unanswered questions are considered applicable for risk calculation based on HACT doc structure
-           // but for average scoring, we might only count those answered.
-           // The HACT document's "total applicable questions in subject area" is a fixed number.
-           // We will use section.scoringLogic.totalApplicableQuestions as the denominator.
+           // HACT: Unanswered non-N/A questions usually take points of the highest risk option (e.g., "No").
+           // This logic should ideally only apply at the *final* calculation, not during answering.
+           // For live feedback during assessment, it might be too punitive.
+           // Let's assume for now, if not answered, it doesn't contribute to points *until summary*.
+           // However, the `totalApplicableQuestions` in `scoringLogic` should be used as the denominator.
         }
       });
       
       const denominator = section.scoringLogic.totalApplicableQuestions > 0 ? section.scoringLogic.totalApplicableQuestions : 1;
-      const averageRiskScore = actualApplicableQuestionsCount > 0 ? totalPoints / actualApplicableQuestionsCount : 0; // If no scoreable answers, avg is 0. Or use totalApplicableQuestions as denominator always?
-                                                                                                                // Using section.scoringLogic.totalApplicableQuestions as per HACT example
       const averageScoreForRating = totalPoints / denominator;
-
 
       let numericRiskScoreCalc: HACTSection['numericRiskScore'] = 1; 
       let areaRiskRatingCalc: HACTSection['areaRiskRating'] = 'Low'; 
 
       const thresholds = section.scoringLogic.ratingThresholds;
-      // Sort thresholds by score to ensure correct matching
-      const sortedThresholds = [...thresholds].sort((a, b) => (a.maxAverageScore ?? Infinity) - (b.maxAverageScore ?? Infinity));
+      const sortedThresholds = [...thresholds].sort((a, b) => (a.minAverageScore ?? -Infinity) - (b.minAverageScore ?? -Infinity));
       
+      let matched = false;
       for (const threshold of sortedThresholds) {
-        if (threshold.maxAverageScore !== undefined && averageScoreForRating <= threshold.maxAverageScore) {
+        const min = threshold.minAverageScore ?? -Infinity;
+        const max = threshold.maxAverageScore ?? Infinity;
+        if (averageScoreForRating >= min && averageScoreForRating <= max) {
           numericRiskScoreCalc = threshold.numericScore;
           areaRiskRatingCalc = threshold.rating;
-          break; 
-        }
-        if (threshold.minAverageScore !== undefined && averageScoreForRating >= threshold.minAverageScore) {
-          // This handles the "High" category which might only have a minAverageScore
-          numericRiskScoreCalc = threshold.numericScore;
-          areaRiskRatingCalc = threshold.rating;
+          matched = true;
+          break;
         }
       }
-      // Ensure High risk is caught if score exceeds all maxes
-      if (sortedThresholds.length > 0) {
-          const highestThreshold = sortedThresholds[sortedThresholds.length -1];
-          if(highestThreshold.minAverageScore !== undefined && averageScoreForRating >= highestThreshold.minAverageScore) {
-            numericRiskScoreCalc = highestThreshold.numericScore;
-            areaRiskRatingCalc = highestThreshold.rating;
-          } else if (highestThreshold.maxAverageScore === undefined && averageScoreForRating > (sortedThresholds[sortedThresholds.length-2]?.maxAverageScore ?? 0) ) {
-            // Handles case where last item is high risk defined by min only
-            numericRiskScoreCalc = highestThreshold.numericScore;
-            areaRiskRatingCalc = highestThreshold.rating;
-          }
+      
+      // Fallback if no exact match (e.g. score is exactly on a boundary missed by <=, or out of all defined ranges)
+      if (!matched && sortedThresholds.length > 0) {
+         if (averageScoreForRating > (sortedThresholds[sortedThresholds.length-1].maxAverageScore ?? Infinity) ) {
+              // If score is higher than the highest max, assign to the highest category
+              numericRiskScoreCalc = sortedThresholds[sortedThresholds.length-1].numericScore;
+              areaRiskRatingCalc = sortedThresholds[sortedThresholds.length-1].rating;
+         } else if (averageScoreForRating < (sortedThresholds[0].minAverageScore ?? -Infinity)) {
+             // If score is lower than the lowest min, assign to the lowest category
+              numericRiskScoreCalc = sortedThresholds[0].numericScore;
+              areaRiskRatingCalc = sortedThresholds[0].rating;
+         } else {
+            // If in between but no exact match (e.g. gaps in thresholds), find closest lower bound
+            for (let i = sortedThresholds.length - 1; i >= 0; i--) {
+                if (averageScoreForRating >= (sortedThresholds[i].minAverageScore ?? -Infinity)) {
+                    numericRiskScoreCalc = sortedThresholds[i].numericScore;
+                    areaRiskRatingCalc = sortedThresholds[i].rating;
+                    break;
+                }
+            }
+         }
       }
 
 
       const currentSectionState = prevData.sections[sectionIndex];
       if (currentSectionState &&
           currentSectionState.totalRiskPoints === totalPoints &&
-          currentSectionState.averageRiskScore === averageScoreForRating &&
+          currentSectionState.averageRiskScore?.toFixed(3) === averageScoreForRating.toFixed(3) && // Compare with precision
           currentSectionState.numericRiskScore === numericRiskScoreCalc &&
           currentSectionState.areaRiskRating === areaRiskRatingCalc) {
-        return prevData; // No change
+        return prevData; 
       }
 
       const newSections = [...prevData.sections];
       newSections[sectionIndex] = { 
         ...section, 
         totalRiskPoints: totalPoints, 
-        averageRiskScore: averageScoreForRating,
+        averageRiskScore: averageScoreForRating, 
         numericRiskScore: numericRiskScoreCalc, 
         areaRiskRating: areaRiskRatingCalc,
       };
@@ -333,39 +389,46 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
       let overallRiskRatingCalc: HACTAssessment['overallRiskRating'] = 'Low';
       const overallThresholds = prevData.overallRatingThresholds || initialAssessmentData.overallRatingThresholds || [];
       
-      const sortedOverallThresholds = [...overallThresholds].sort((a, b) => (a.maxAverageScore ?? Infinity) - (b.maxAverageScore ?? Infinity));
+      const sortedOverallThresholds = [...overallThresholds].sort((a, b) => (a.minAverageScore ?? -Infinity) - (b.minAverageScore ?? -Infinity));
 
+      let matched = false;
       for (const threshold of sortedOverallThresholds) {
-        if (threshold.maxAverageScore !== undefined && overallAverageRiskScoreCalc <= threshold.maxAverageScore) {
+        const min = threshold.minAverageScore ?? -Infinity;
+        const max = threshold.maxAverageScore ?? Infinity;
+        if (overallAverageRiskScoreCalc >= min && overallAverageRiskScoreCalc <= max) {
           overallNumericRiskScoreCalc = threshold.numericScore;
           overallRiskRatingCalc = threshold.rating;
+          matched = true;
           break;
         }
-        if (threshold.minAverageScore !== undefined && overallAverageRiskScoreCalc >= threshold.minAverageScore) {
-          overallNumericRiskScoreCalc = threshold.numericScore;
-          overallRiskRatingCalc = threshold.rating;
-        }
       }
-        // Ensure High risk is caught if score exceeds all maxes
-      if (sortedOverallThresholds.length > 0) {
-          const highestThreshold = sortedOverallThresholds[sortedOverallThresholds.length -1];
-          if(highestThreshold.minAverageScore !== undefined && overallAverageRiskScoreCalc >= highestThreshold.minAverageScore) {
-            overallNumericRiskScoreCalc = highestThreshold.numericScore;
-            overallRiskRatingCalc = highestThreshold.rating;
-          } else if (highestThreshold.maxAverageScore === undefined && overallAverageRiskScoreCalc > (sortedOverallThresholds[sortedOverallThresholds.length-2]?.maxAverageScore ?? 0) ) {
-             overallNumericRiskScoreCalc = highestThreshold.numericScore;
-             overallRiskRatingCalc = highestThreshold.rating;
-          }
+      
+      if (!matched && sortedOverallThresholds.length > 0) {
+         if (overallAverageRiskScoreCalc > (sortedOverallThresholds[sortedOverallThresholds.length-1].maxAverageScore ?? Infinity) ) {
+              overallNumericRiskScoreCalc = sortedOverallThresholds[sortedOverallThresholds.length-1].numericScore;
+              overallRiskRatingCalc = sortedOverallThresholds[sortedOverallThresholds.length-1].rating;
+         } else if (overallAverageRiskScoreCalc < (sortedOverallThresholds[0].minAverageScore ?? -Infinity)) {
+              overallNumericRiskScoreCalc = sortedOverallThresholds[0].numericScore;
+              overallRiskRatingCalc = sortedOverallThresholds[0].rating;
+         } else {
+            for (let i = sortedOverallThresholds.length - 1; i >= 0; i--) {
+                if (overallAverageRiskScoreCalc >= (sortedOverallThresholds[i].minAverageScore ?? -Infinity)) {
+                    overallNumericRiskScoreCalc = sortedOverallThresholds[i].numericScore;
+                    overallRiskRatingCalc = sortedOverallThresholds[i].rating;
+                    break;
+                }
+            }
+         }
       }
 
 
       if (
         prevData.overallTotalRiskPoints === overallTotalRiskPoints &&
-        prevData.overallAverageRiskScore === overallAverageRiskScoreCalc &&
+        prevData.overallAverageRiskScore?.toFixed(3) === overallAverageRiskScoreCalc.toFixed(3) &&
         prevData.overallNumericRiskScore === overallNumericRiskScoreCalc &&
         prevData.overallRiskRating === overallRiskRatingCalc
       ) {
-        return prevData; // No change
+        return prevData; 
       }
 
       return {
@@ -378,11 +441,6 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     });
   }, []); 
 
-  const getRuleBasedRecommendation = useCallback((question: HACTQuestion, answer: Answer): string | null => {
-    // This function can be expanded based on specific rules.
-    // For now, refers to external static recommendations.
-    return null; 
-  }, []);
 
   const value: AssessmentContextState = {
     organizationName,
@@ -402,11 +460,9 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     getQuestionStatus,
     calculateSectionScore,
     calculateOverallScore,
-    getRuleBasedRecommendation,
     resetAssessment,
     areAllQuestionsInSectionAnswered,
   };
 
   return <AssessmentContext.Provider value={value}>{children}</AssessmentContext.Provider>;
 };
-
