@@ -34,10 +34,10 @@ export default function WelcomePage() {
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4">
-             <Image src="https://picsum.photos/120/120" alt="HACT Navigator Logo" width={100} height={100} className="rounded-full" data-ai-hint="assessment tools" />
+             <Image src="https://picsum.photos/120/120" alt="HACT Logo" width={100} height={100} className="rounded-full" data-ai-hint="assessment finance" />
           </div>
-          <CardTitle className="text-3xl font-bold">HACT Navigator</CardTitle>
-          <CardDescription>Streamline your HACT micro-assessment process.</CardDescription>
+          <CardTitle className="text-3xl font-bold">HACT</CardTitle>
+          <CardDescription>Harmonized Approach to Cash Transfers. Streamline your micro-assessment process.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
           <div className="space-y-2">

@@ -36,7 +36,7 @@ interface AssessmentProviderProps {
   children: ReactNode;
 }
 
-const LOCAL_STORAGE_KEY = 'hactNavigatorState';
+const LOCAL_STORAGE_KEY = 'hactState';
 
 export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children }) => {
   const [organizationName, setOrganizationNameState] = useState<string | null>(defaultState.organizationName);
