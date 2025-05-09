@@ -1,3 +1,4 @@
+
 import type { HACTAssessment } from '@/types';
 
 export const initialAssessmentData: HACTAssessment = {
@@ -17,7 +18,7 @@ export const initialAssessmentData: HACTAssessment = {
             Yes: { riskAssessment: "Low", points: 1, defaultExplanationPlaceholder: "Provide legal status and date of registration..." },
             No: { riskAssessment: "High", points: 8, defaultExplanationPlaceholder: "Explain why not registered or non-compliant..." }
           },
-          exampleComment: "Organization for Peace, Relief and Development (OPRD) is registered with the Republic of South Sudan... Its registration number is 2225 and the certificate of registration was issued on 28th July 2015. It also possesses a valid NGO operation certificate..."
+          exampleComment: "Community Health Services (CMS) is registered with the Republic of South Sudan... Its registration number is 2225 and the certificate of registration was issued on 28th July 2015. It also possesses a valid NGO operation certificate..."
         },
         {
           id: "1.2",
@@ -28,7 +29,7 @@ export const initialAssessmentData: HACTAssessment = {
             Yes: { riskAssessment: "Moderate", points: 4, promptForDetails: "Describe the significant issues reported and from which assurance activities/agencies." },
             No: { riskAssessment: "Low", points: 1, promptForDetails: "Confirm if any UN resources received and if no issues were reported." }
           },
-          exampleComment: "The IP has in the past received funding from United Nations agencies. For example;\nUNDP\nProject number: 00094767...\nUNICEF\nProject code: EAD...\nWe were unable to confirm whether there were any significant issues reported in managing resources as OPRD has never been audited."
+          exampleComment: "The IP has in the past received funding from United Nations agencies. For example;\nUNDP\nProject number: 00094767...\nUNICEF\nProject code: EAD...\nWe were unable to confirm whether there were any significant issues reported in managing resources as Community Health Services (CMS) has never been audited."
         },
         {
           id: "1.3",
