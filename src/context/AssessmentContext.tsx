@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
@@ -56,8 +57,6 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
         setCurrentSectionId(parsedState.currentSectionId || null);
         setCurrentQuestionIndexInSection(parsedState.currentQuestionIndexInSection || 0);
         setAnswers(parsedState.answers || {});
-        // assessmentData is initialized from initialAssessmentData and then potentially updated with scores
-        // For now, we'll just re-initialize it. If scores were persisted, this would need more logic.
         setAssessmentData(parsedState.assessmentData || JSON.parse(JSON.stringify(initialAssessmentData)));
       }
     } catch (error) {
@@ -72,7 +71,7 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
         currentSectionId,
         currentQuestionIndexInSection,
         answers,
-        assessmentData, // Persisting full data including scores
+        assessmentData, 
       };
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(stateToSave));
     } catch (error) {
@@ -86,10 +85,10 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
   }, []);
 
   const startAssessment = useCallback((data: HACTAssessment, firstSectionId: string) => {
-    setAssessmentData(JSON.parse(JSON.stringify(data))); // Deep copy
+    setAssessmentData(JSON.parse(JSON.stringify(data))); 
     setCurrentSectionId(firstSectionId);
     setCurrentQuestionIndexInSection(0);
-    setAnswers({}); // Reset answers
+    setAnswers({}); 
     router.push(`/assessment/${firstSectionId}`);
   }, [router]);
   
@@ -141,7 +140,6 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
       router.push(`/assessment/${nextSection.id}`);
       return nextSection.id;
     }
-    // Last section, navigate to summary
     router.push('/assessment/summary');
     return null; 
   }, [assessmentData.sections, currentSectionId, router]);
@@ -151,11 +149,10 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     if (currentIdx > 0) {
       const prevSection = assessmentData.sections[currentIdx - 1];
       setCurrentSectionId(prevSection.id);
-      setCurrentQuestionIndexInSection(prevSection.questions.length - 1); // Go to last question of prev section
+      setCurrentQuestionIndexInSection(prevSection.questions.length - 1); 
       router.push(`/assessment/${prevSection.id}`);
       return prevSection.id;
     }
-    // First section, cannot go back further with this logic
     toast({ title: "You are at the first section."});
     return null;
   }, [assessmentData.sections, currentSectionId, router, toast]);
@@ -164,91 +161,111 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
   const getQuestionStatus = useCallback((questionId: string): 'answered' | 'skipped' | 'unanswered' => {
     const answer = answers[questionId];
     if (!answer) return 'unanswered';
-    if (answer.value === 'N/A') return 'skipped'; // Or however you define skipped
+    if (answer.value === 'N/A') return 'skipped'; 
     return 'answered';
   }, [answers]);
 
   const calculateSectionScore = useCallback((sectionId: string) => {
-    // Basic scoring logic, can be expanded
-    const section = assessmentData.sections.find(s => s.id === sectionId);
-    if (!section) return;
-
-    let totalPoints = 0;
-    let applicableQuestions = 0;
-
-    section.questions.forEach(q => {
-      const answer = answers[q.id];
-      if (answer && answer.value !== 'N/A') {
-        applicableQuestions++;
-        const optionKey = answer.value as keyof HACTQuestion['options'];
-        if (q.options && q.options[optionKey]) {
-          totalPoints += q.options[optionKey]!.points;
-        }
-      } else if (!answer && q.type !== 'info_only') {
-        // Handle unanswered questions if needed, e.g. assign max points or specific penalty
-      }
-    });
-    
-    let riskScore = 0;
-    let areaRiskRating: HACTSection['areaRiskRating'] = 'Low';
-
-    for (const threshold of section.scoringLogic.ratingThresholds) {
-        if (threshold.maxPoints !== undefined && totalPoints <= threshold.maxPoints) {
-            riskScore = threshold.score;
-            areaRiskRating = threshold.rating;
-            break;
-        }
-        if (threshold.minPoints !== undefined && totalPoints >= threshold.minPoints) {
-            riskScore = threshold.score;
-            areaRiskRating = threshold.rating;
-            // Don't break, continue to check if higher thresholds are met
-        }
-    }
-    // If totalPoints exceed all maxPoints, it might fall into the last category defined by minPoints
-     if (section.scoringLogic.ratingThresholds.length > 0) {
-        const lastThreshold = section.scoringLogic.ratingThresholds[section.scoringLogic.ratingThresholds.length - 1];
-        if (lastThreshold.minPoints !== undefined && totalPoints >= lastThreshold.minPoints) {
-            riskScore = lastThreshold.score;
-            areaRiskRating = lastThreshold.rating;
-        }
-    }
-
-
+    // `answers` is from the closure of this useCallback. It will be fresh if `answers` state changes,
+    // because this function instance will be re-created.
     setAssessmentData(prevData => {
+      const section = prevData.sections.find(s => s.id === sectionId);
+      if (!section) return prevData;
+
+      let totalPoints = 0;
+      let applicableQuestions = 0;
+
+      section.questions.forEach(q => {
+        const answer = answers[q.id]; // Using `answers` from the useCallback's closure
+        if (answer && answer.value !== 'N/A') {
+          applicableQuestions++;
+          const optionKey = answer.value as keyof HACTQuestion['options'];
+          if (q.options && q.options[optionKey]) {
+            totalPoints += q.options[optionKey]!.points;
+          }
+        } else if (!answer && q.type !== 'info_only') {
+          // Handle unanswered questions if needed
+        }
+      });
+      
+      let riskScore = 0;
+      let areaRiskRating: HACTSection['areaRiskRating'] = 'Low';
+
+      for (const threshold of section.scoringLogic.ratingThresholds) {
+          if (threshold.maxPoints !== undefined && totalPoints <= threshold.maxPoints) {
+              riskScore = threshold.score;
+              areaRiskRating = threshold.rating;
+              break;
+          }
+          if (threshold.minPoints !== undefined && totalPoints >= threshold.minPoints) {
+              riskScore = threshold.score;
+              areaRiskRating = threshold.rating;
+          }
+      }
+      if (section.scoringLogic.ratingThresholds.length > 0) {
+          const lastThreshold = section.scoringLogic.ratingThresholds[section.scoringLogic.ratingThresholds.length - 1];
+          if (lastThreshold.minPoints !== undefined && totalPoints >= lastThreshold.minPoints) {
+              riskScore = lastThreshold.score;
+              areaRiskRating = lastThreshold.rating;
+          }
+      }
+
+      const currentSectionState = prevData.sections.find(s => s.id === sectionId);
+      if (currentSectionState &&
+          currentSectionState.totalRiskPoints === totalPoints &&
+          currentSectionState.riskScore === riskScore &&
+          currentSectionState.areaRiskRating === areaRiskRating &&
+          currentSectionState.scoringLogic.totalApplicable === applicableQuestions) {
+        return prevData; // No actual change in this section's score, prevent re-render
+      }
+
       const newSections = prevData.sections.map(s => 
         s.id === sectionId ? { ...s, totalRiskPoints: totalPoints, riskScore, areaRiskRating, scoringLogic: {...s.scoringLogic, totalApplicable: applicableQuestions} } : s
       );
       return { ...prevData, sections: newSections };
     });
-
-  }, [answers, assessmentData.sections]);
+  }, [answers]); // Depends only on `answers`. `setAssessmentData` is stable.
 
   const calculateOverallScore = useCallback(() => {
-    // Placeholder for overall score calculation
-    let overallTotalRiskPoints = 0;
-    assessmentData.sections.forEach(section => {
-      if (section.totalRiskPoints) {
-        overallTotalRiskPoints += section.totalRiskPoints;
+    // This function now uses the functional update form of setAssessmentData to ensure it reads the latest state
+    // if it were to be called in a context where assessmentData from the outer scope might be stale.
+    // However, its current direct usage of assessmentData.sections from the outer scope is fine
+    // as long as this function is re-created when assessmentData.sections changes IF it were a dependency.
+    // For now, let's make it use the functional update to be safer and more consistent.
+    setAssessmentData(prevData => {
+      let overallTotalRiskPoints = 0;
+      prevData.sections.forEach(section => {
+        if (section.totalRiskPoints) {
+          overallTotalRiskPoints += section.totalRiskPoints;
+        }
+      });
+      
+      const overallRiskRating: HACTAssessment['overallRiskRating'] = overallTotalRiskPoints > 50 ? 'High' : overallTotalRiskPoints > 20 ? 'Moderate' : 'Low';
+      
+      // Placeholder for overallRiskScore, this needs to be defined by HACT rules
+      const overallRiskScore = 0; 
+
+      if (
+        prevData.overallTotalRiskPoints === overallTotalRiskPoints &&
+        prevData.overallRiskScore === overallRiskScore &&
+        prevData.overallRiskRating === overallRiskRating
+      ) {
+        return prevData;
       }
+
+      return {
+        ...prevData,
+        overallTotalRiskPoints,
+        overallRiskScore: overallRiskScore, 
+        overallRiskRating: overallRiskRating,
+      };
     });
-    // This needs proper logic based on HACT guidelines for overall rating
-    const overallRiskRating: HACTAssessment['overallRiskRating'] = overallTotalRiskPoints > 50 ? 'High' : overallTotalRiskPoints > 20 ? 'Moderate' : 'Low';
-    
-    setAssessmentData(prevData => ({
-      ...prevData,
-      overallTotalRiskPoints,
-      // overallRiskScore and overallRiskRating need to be determined by HACT rules
-      overallRiskScore: 0, // Placeholder
-      overallRiskRating: overallRiskRating, // Placeholder
-    }));
-  }, [assessmentData.sections]);
+  }, []); // No dependencies needed if it always calculates from scratch based on prevData.
 
   const getRuleBasedRecommendation = useCallback((question: HACTQuestion, answer: Answer): string | null => {
-    // Example rule-based recommendation
     if (question.id === "1.1" && answer.value === "No") {
       return "The organization should ensure it is legally registered and compliant with all registration requirements. Provide documentation of legal status and registration date.";
     }
-    // Add more rules here
     return null;
   }, []);
 
@@ -277,3 +294,4 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
 
   return <AssessmentContext.Provider value={value}>{children}</AssessmentContext.Provider>;
 };
+
