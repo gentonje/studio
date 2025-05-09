@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from 'react';
+import React, { useEffect } from 'react'; // Added React import
 import { useRouter } from 'next/navigation';
 import { useAssessment } from '@/hooks/useAssessment';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { generateHACTRecommendationAction } from '@/app/actions';
 import { HACTQuestion, Answer } from '@/types';
 import { Loader2, Download, Printer, RotateCcw, AlertTriangle, CheckCircle2, HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge'; // Added Badge import
 
 interface RecommendationItem {
   questionText: string;
