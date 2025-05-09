@@ -178,11 +178,51 @@ export default function SummaryPage() {
                       </div>
                     </AccordionTrigger>
                     <div className="accordion-content-wrapper"> {/* Wrapper for print styling */}
-                      <AccordionContent className="p-4 space-y-2 text-base">
+                      <AccordionContent className="p-4 space-y-4 text-base">
                         <p><strong>Risk Points:</strong> {section.totalRiskPoints ?? 'Not calculated'}</p>
                         <p><strong>Risk Score:</strong> {section.riskScore ?? 'Not calculated'}</p>
                         <p><strong>Area Risk Rating:</strong> {section.areaRiskRating ?? 'Not calculated'}</p>
-                        <p><strong>Applicable Questions:</strong> {section.scoringLogic.totalApplicable ?? section.questions.length}</p>
+                        <p><strong>Applicable Questions in Section:</strong> {section.scoringLogic.totalApplicable ?? section.questions.length}</p>
+                        
+                        {section.questions.length > 0 && (
+                          <div className="mt-4 pt-4 border-t">
+                            <h4 className="text-md font-semibold mb-3 text-foreground">Detailed Question Review:</h4>
+                            <ul className="space-y-3">
+                              {section.questions.map((q, qIndex) => {
+                                const userAnswer = answers[q.id];
+                                const answerValue = userAnswer?.value ?? 'Not Answered';
+                                const answerExplanation = userAnswer?.explanation;
+                                
+                                let questionRisk: HACTQuestionOption['riskAssessment'] | 'N/A' = 'N/A';
+                                let questionRiskClasses = getRiskColorClasses('N/A');
+
+                                if (userAnswer && q.options && userAnswer.value && q.options[userAnswer.value as 'Yes'|'No'|'N/A']) {
+                                  const riskOpt = q.options[userAnswer.value as 'Yes'|'No'|'N/A']!.riskAssessment;
+                                  questionRisk = riskOpt;
+                                  questionRiskClasses = getRiskColorClasses(riskOpt);
+                                } else if (answerValue === 'Not Answered' && q.type !== 'info_only') {
+                                  questionRisk = 'High'; // Default for unanswered, actionable questions
+                                  questionRiskClasses = getRiskColorClasses('High');
+                                }
+
+                                if (q.type === 'info_only') return null;
+
+                                return (
+                                  <li key={`${section.id}-q-${q.id}`} className="p-3 border rounded-md bg-background shadow-sm">
+                                    <p className="font-medium text-primary">{qIndex + 1}. {q.text}</p>
+                                    <p className="text-sm text-muted-foreground mt-1">
+                                      Your Answer: <span className="font-semibold">{answerValue}</span>
+                                      {answerExplanation && <span className="text-xs block pl-4 italic mt-0.5">Explanation: {answerExplanation}</span>}
+                                    </p>
+                                    <p className={`text-sm mt-1`}>
+                                      Risk for this answer: <Badge variant="outline" className={`px-2 py-0.5 text-xs ${questionRiskClasses.split(' ')[0]} ${questionRiskClasses.split(' ')[1]} border-current`}>{questionRisk}</Badge>
+                                    </p>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        )}
                       </AccordionContent>
                     </div>
                   </AccordionItem>
@@ -194,7 +234,7 @@ export default function SummaryPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-2xl">Recommendations</CardTitle>
-              <CardDescription>Actionable insights based on the assessment findings.</CardDescription>
+              <CardDescription>Actionable insights based on the assessment findings. AI-enhanced recommendations provide detailed guidance.</CardDescription>
             </CardHeader>
             <CardContent>
               {isLoadingRecs && <div className="flex items-center justify-center p-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-3 text-lg">Generating recommendations...</p></div>}
@@ -205,8 +245,11 @@ export default function SummaryPage() {
                     <li key={index} className="p-4 border rounded-lg shadow-sm bg-background hover:shadow-md transition-shadow">
                       <p className="font-semibold text-primary">{rec.questionText}</p>
                       <p className="text-sm text-muted-foreground">Your Answer: <span className="font-medium">{rec.userAnswer}</span> (Risk: <span className={`font-medium ${getRiskColorClasses(rec.risk as any).split(' ')[0]}`}>{rec.risk}</span>)</p>
-                      <p className="mt-2 text-foreground"><strong>Recommendation:</strong> {rec.recommendation}</p>
-                      {rec.isAIR && <Badge variant="outline" className="mt-1 border-accent text-accent">AI Enhanced</Badge>}
+                      <div className="mt-2 text-foreground prose prose-sm max-w-none"> {/* Using prose for better text formatting from AI */}
+                        <strong>Recommendation:</strong>
+                        <div dangerouslySetInnerHTML={{ __html: rec.recommendation.replace(/\n/g, '<br />') }} />
+                      </div>
+                      {rec.isAIR && <Badge variant="outline" className="mt-2 border-accent text-accent">AI Enhanced Detailed Guidance</Badge>}
                     </li>
                   ))}
                 </ul>
@@ -230,3 +273,4 @@ export default function SummaryPage() {
     </div>
   );
 }
+
