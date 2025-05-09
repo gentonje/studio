@@ -11,6 +11,7 @@ import type { HACTQuestion, Answer } from '@/types';
 import { Loader2, Download, Printer, RotateCcw, AlertTriangle, CheckCircle2, HelpCircle, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge'; 
+import { getStaticRecommendation } from '@/lib/recommendations';
 
 interface RecommendationItem {
   questionText: string;
@@ -29,7 +30,6 @@ export default function SummaryPage() {
     answers,
     calculateOverallScore,
     calculateSectionScore, 
-    getRuleBasedRecommendation,
     resetAssessment 
   } = useAssessment();
 
@@ -55,7 +55,7 @@ export default function SummaryPage() {
       for (const question of section.questions) {
         const answer = answers[question.id];
         if (answer && (answer.value === "No" || (answer.value === "Yes" && question.options?.Yes?.riskAssessment !== "Low") )) { 
-          let recText = getRuleBasedRecommendation(question, answer);
+          let recText = getStaticRecommendation(question, answer);
           let isAIR = false;
 
           const risk = question.options?.[answer.value as 'Yes'|'No']?.riskAssessment || 'N/A';
@@ -230,5 +230,3 @@ export default function SummaryPage() {
     </div>
   );
 }
-
-```
