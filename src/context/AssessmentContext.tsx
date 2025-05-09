@@ -166,8 +166,6 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
   }, [answers]);
 
   const calculateSectionScore = useCallback((sectionId: string) => {
-    // `answers` is from the closure of this useCallback. It will be fresh if `answers` state changes,
-    // because this function instance will be re-created.
     setAssessmentData(prevData => {
       const section = prevData.sections.find(s => s.id === sectionId);
       if (!section) return prevData;
@@ -176,39 +174,50 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
       let applicableQuestions = 0;
 
       section.questions.forEach(q => {
-        const answer = answers[q.id]; // Using `answers` from the useCallback's closure
-        if (answer && answer.value !== 'N/A') {
+        const answer = answers[q.id]; 
+        if (answer && answer.value !== 'N/A' && q.type !== 'info_only') {
           applicableQuestions++;
           const optionKey = answer.value as keyof HACTQuestion['options'];
           if (q.options && q.options[optionKey]) {
             totalPoints += q.options[optionKey]!.points;
           }
         } else if (!answer && q.type !== 'info_only') {
-          // Handle unanswered questions if needed
+          // Unanswered actionable questions could be considered high risk by default,
+          // but for scoring based on *provided* answers, they don't add points.
+          // They will be highlighted as 'Not Answered' in the summary.
         }
       });
       
       let riskScore = 0;
-      let areaRiskRating: HACTSection['areaRiskRating'] = 'Low';
+      let areaRiskRating: HACTSection['areaRiskRating'] = 'Low'; // Default
 
-      for (const threshold of section.scoringLogic.ratingThresholds) {
-          if (threshold.maxPoints !== undefined && totalPoints <= threshold.maxPoints) {
-              riskScore = threshold.score;
-              areaRiskRating = threshold.rating;
-              break;
-          }
-          if (threshold.minPoints !== undefined && totalPoints >= threshold.minPoints) {
-              riskScore = threshold.score;
-              areaRiskRating = threshold.rating;
-          }
-      }
+      // Assuming ratingThresholds are ordered from lowest risk (lowest points) to highest risk.
+      // The last threshold might be defined by minPoints for "High" risk.
       if (section.scoringLogic.ratingThresholds.length > 0) {
-          const lastThreshold = section.scoringLogic.ratingThresholds[section.scoringLogic.ratingThresholds.length - 1];
-          if (lastThreshold.minPoints !== undefined && totalPoints >= lastThreshold.minPoints) {
-              riskScore = lastThreshold.score;
-              areaRiskRating = lastThreshold.rating;
+        // Default to the highest risk category defined if no lower bands are met
+        const highestRiskThreshold = section.scoringLogic.ratingThresholds[section.scoringLogic.ratingThresholds.length - 1];
+        riskScore = highestRiskThreshold.score;
+        areaRiskRating = highestRiskThreshold.rating;
+
+        for (const threshold of section.scoringLogic.ratingThresholds) {
+          if (threshold.maxPoints !== undefined && totalPoints <= threshold.maxPoints) {
+            riskScore = threshold.score;
+            areaRiskRating = threshold.rating;
+            break; // Found the correct band, exit
           }
+          // If a threshold is defined by minPoints (e.g. for "High"), 
+          // and we haven't broken from a maxPoints match, this implies totalPoints is above previous maxPoints.
+          // This will correctly catch the "High" category if it's defined with minPoints and is the last one.
+          if (threshold.minPoints !== undefined && totalPoints >= threshold.minPoints) {
+             // This condition primarily serves to confirm the rating if points fall into an open-ended high category
+            riskScore = threshold.score;
+            areaRiskRating = threshold.rating;
+            // Do not break here if thresholds are structured such that a minPoints threshold might precede a more specific maxPoints one.
+            // However, for typical HACT (Low, Mod, Sig defined by maxPoints, High by minPoints), this order is fine.
+          }
+        }
       }
+
 
       const currentSectionState = prevData.sections.find(s => s.id === sectionId);
       if (currentSectionState &&
@@ -216,7 +225,7 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
           currentSectionState.riskScore === riskScore &&
           currentSectionState.areaRiskRating === areaRiskRating &&
           currentSectionState.scoringLogic.totalApplicable === applicableQuestions) {
-        return prevData; // No actual change in this section's score, prevent re-render
+        return prevData; 
       }
 
       const newSections = prevData.sections.map(s => 
@@ -224,31 +233,38 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
       );
       return { ...prevData, sections: newSections };
     });
-  }, [answers]); // Depends only on `answers`. `setAssessmentData` is stable.
+  }, [answers]); 
 
   const calculateOverallScore = useCallback(() => {
-    // This function now uses the functional update form of setAssessmentData to ensure it reads the latest state
-    // if it were to be called in a context where assessmentData from the outer scope might be stale.
-    // However, its current direct usage of assessmentData.sections from the outer scope is fine
-    // as long as this function is re-created when assessmentData.sections changes IF it were a dependency.
-    // For now, let's make it use the functional update to be safer and more consistent.
     setAssessmentData(prevData => {
       let overallTotalRiskPoints = 0;
       prevData.sections.forEach(section => {
-        if (section.totalRiskPoints) {
+        if (section.totalRiskPoints !== undefined) { // Ensure points are calculated
           overallTotalRiskPoints += section.totalRiskPoints;
         }
       });
       
-      const overallRiskRating: HACTAssessment['overallRiskRating'] = overallTotalRiskPoints > 50 ? 'High' : overallTotalRiskPoints > 20 ? 'Moderate' : 'Low';
+      // Define overall risk rating based on HACT common practice or specific guidelines for micro-assessment.
+      // Example thresholds (these should be validated against HACT guidelines):
+      let overallRiskRatingCalc: HACTAssessment['overallRiskRating'] = 'Low';
+      if (overallTotalRiskPoints >= 101) { // Example: Derived from a sum of section max points leading to "High"
+        overallRiskRatingCalc = 'High';
+      } else if (overallTotalRiskPoints >= 51) { // Example
+        overallRiskRatingCalc = 'Significant';
+      } else if (overallTotalRiskPoints >= 21) { // Example
+        overallRiskRatingCalc = 'Moderate';
+      } else {
+        overallRiskRatingCalc = 'Low';
+      }
       
-      // Placeholder for overallRiskScore, this needs to be defined by HACT rules
-      const overallRiskScore = 0; 
+      // Overall Risk Score might be an average or weighted score, or simply not applicable / same as points.
+      // For now, let's keep it simple or as a placeholder if specific logic isn't defined.
+      const overallRiskScoreCalc = 0; // Placeholder: Actual calculation method needs definition if it's not just total points.
 
       if (
         prevData.overallTotalRiskPoints === overallTotalRiskPoints &&
-        prevData.overallRiskScore === overallRiskScore &&
-        prevData.overallRiskRating === overallRiskRating
+        prevData.overallRiskScore === overallRiskScoreCalc &&
+        prevData.overallRiskRating === overallRiskRatingCalc
       ) {
         return prevData;
       }
@@ -256,11 +272,11 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
       return {
         ...prevData,
         overallTotalRiskPoints,
-        overallRiskScore: overallRiskScore, 
-        overallRiskRating: overallRiskRating,
+        overallRiskScore: overallRiskScoreCalc, 
+        overallRiskRating: overallRiskRatingCalc,
       };
     });
-  }, []); // No dependencies needed if it always calculates from scratch based on prevData.
+  }, []); 
 
   const getRuleBasedRecommendation = useCallback((question: HACTQuestion, answer: Answer): string | null => {
     if (question.id === "1.1" && answer.value === "No") {
@@ -294,4 +310,3 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
 
   return <AssessmentContext.Provider value={value}>{children}</AssessmentContext.Provider>;
 };
-
