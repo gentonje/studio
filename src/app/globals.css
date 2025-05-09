@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -97,23 +98,27 @@
 @media print {
   body {
     font-family: Arial, sans-serif; /* Common sans-serif for reports */
-    font-size: 11pt; /* Slightly smaller for more content on A4 */
+    font-size: 10pt; /* Slightly smaller for more content on A4 */
     line-height: 1.3;
-    margin: 0;
-    padding: 0;
+    margin: 0 !important; /* Remove default body margins for print */
+    padding: 0 !important; /* Remove default body padding for print */
     background-color: #fff !important;
     color: #000 !important;
+    -webkit-print-color-adjust: exact !important; /* Chrome, Safari */
+    print-color-adjust: exact !important; /* Standard */
   }
 
   @page {
     size: A4;
-    margin: 0.75in; /* Common A4 margin */
+    margin: 0.5in; /* Common A4 margin */
   }
 
   /* Hide non-print elements globally */
   header#app-header,
   footer.app-footer,
-  .no-print {
+  .no-print,
+  button, /* Hide all buttons by default in print */
+  .ToastViewport { /* Hide toast notifications */
     display: none !important;
   }
   
@@ -131,30 +136,35 @@
   .print-summary-report .card {
     box-shadow: none !important;
     border: 1px solid #ccc !important;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem; /* Slightly reduced margin */
     page-break-inside: avoid;
     border-radius: 0 !important; /* Remove rounded corners for a more "document" feel */
     background-color: #fff !important; 
   }
+  
+  .print-summary-report .card:last-child {
+    margin-bottom: 0; /* No margin for the last card */
+  }
+
 
   .print-summary-report .card-header {
     background-color: #f0f0f0 !important; /* Light grey for headers */
     color: #000 !important;
-    padding: 0.5rem 1rem !important;
+    padding: 0.4rem 0.8rem !important; /* Slightly reduced padding */
     border-bottom: 1px solid #ccc !important;
   }
   
   .print-summary-report .card-header .card-title {
-      font-size: 1.25rem !important; 
+      font-size: 1.1rem !important; 
       color: #000 !important;
   }
   .print-summary-report .card-header .card-description {
-      font-size: 0.9rem !important;
+      font-size: 0.8rem !important;
       color: #333 !important;
   }
 
   .print-summary-report .card-content {
-    padding: 1rem !important;
+    padding: 0.8rem !important; /* Slightly reduced padding */
   }
   .print-summary-report .card-footer { /* Hides the footer with buttons like "Print Report", "Start New" */
       display: none !important; 
@@ -164,32 +174,43 @@
   .print-summary-report .accordion-item {
     page-break-inside: avoid;
     border-bottom: 1px solid #eee !important;
+    margin-bottom: 0.5rem !important;
   }
   .print-summary-report .accordion-trigger {
     background-color: #f9f9f9 !important; 
-    padding: 0.5rem 1rem !important;
+    padding: 0.4rem 0.8rem !important; /* Slightly reduced padding */
     color: #000 !important;
+    border: 1px solid #ddd;
   }
   .print-summary-report .accordion-trigger svg { /* Chevron */
      display: none !important; 
   }
 
   /* Force accordion content to be visible and expanded */
+  /* Use Radix's data attributes for state */
   .print-summary-report .accordion-content-wrapper > div[data-state='closed'],
   .print-summary-report .accordion-content-wrapper > div[data-state='open'] {
     display: block !important;
-    height: auto !important;
+    height: auto !important; /* Ensure full height is rendered */
     opacity: 1 !important;
-    overflow: visible !important;
-    animation: none !important; 
+    overflow: visible !important; /* Ensure content is not clipped */
     visibility: visible !important; 
+    animation: none !important; /* Disable animations */
     background-color: #fff !important;
     color: #000 !important;
+    border: 1px solid #eee;
+    border-top: none;
   }
-  .print-summary-report .accordion-content-wrapper > div[data-state='closed'] > div,
-  .print-summary-report .accordion-content-wrapper > div[data-state='open'] > div {
-    padding-bottom: 1rem !important; 
-    padding-top: 0.5rem !important;
+  /* Inner div padding */
+  .print-summary-report .accordion-content-wrapper > div > div {
+    padding-bottom: 0.8rem !important; 
+    padding-top: 0.4rem !important;
+    color: #000 !important;
+  }
+  .print-summary-report .prose { /* Ensure prose styles are visible */
+    color: #000 !important;
+  }
+  .print-summary-report .prose strong, .print-summary-report .prose h4 {
     color: #000 !important;
   }
 
@@ -198,51 +219,60 @@
   .print-summary-report .badge {
     border: 1px solid #555 !important;
     color: #000 !important;
-    background-color: #fff !important;
+    background-color: #fff !important; /* Ensure badges are not transparent or using theme colors */
     padding: 0.1rem 0.4rem !important;
     font-size: 0.7rem !important;
     font-weight: normal !important;
+    display: inline-block; /* Ensure badges flow correctly */
   }
   .print-summary-report .badge.border-accent,
   .print-summary-report .badge[class*="text-accent"] { /* Catch AI enhanced badge */
     border-color: #006400 !important; /* Dark Green border for AI enhanced */
-    color: #000 !important;
+    color: #000 !important; /* Text color black for readability */
+    background-color: #f0fff0 !important; /* Light green background for AI badge */
   }
 
-  /* Risk color styling for print */
-  /* Tailwind class overrides */
-  .print-summary-report .bg-green-100 { background-color: #e6ffe6 !important; border-left: 3px solid #4CAF50; color: #000 !important; }
-  .print-summary-report .text-green-600 { color: #006400 !important; }
-  .print-summary-report .bg-yellow-100 { background-color: #fff9e6 !important; border-left: 3px solid #FFC107; color: #000 !important; }
-  .print-summary-report .text-yellow-600 { color: #b38600 !important; }
-  .print-summary-report .bg-orange-100 { background-color: #ffebcc !important; border-left: 3px solid #FF9800; color: #000 !important; }
-  .print-summary-report .text-orange-600 { color: #cc5200 !important; }
-  .print-summary-report .bg-red-100 { background-color: #ffe6e6 !important; border-left: 3px solid #F44336; color: #000 !important; }
-  .print-summary-report .text-red-600 { color: #b30000 !important; }
-  .print-summary-report .bg-gray-100 { background-color: #f0f0f0 !important; border-left: 3px solid #9E9E9E; color: #000 !important; }
-  .print-summary-report .text-gray-600 { color: #333 !important; }
+  /* Risk color styling for print - simplified for better printability */
+  .print-summary-report [class*="bg-green-100"] { background-color: #e6ffe6 !important; border-left: 3px solid #4CAF50; color: #000 !important; }
+  .print-summary-report [class*="text-green-"] { color: #005000 !important; } /* Darker green text */
+  .print-summary-report [class*="bg-yellow-100"] { background-color: #fff9e6 !important; border-left: 3px solid #FFC107; color: #000 !important; }
+  .print-summary-report [class*="text-yellow-"] { color: #b38600 !important; }
+  .print-summary-report [class*="bg-orange-100"] { background-color: #ffebcc !important; border-left: 3px solid #FF9800; color: #000 !important; }
+  .print-summary-report [class*="text-orange-"] { color: #cc5200 !important; }
+  .print-summary-report [class*="bg-red-100"] { background-color: #ffe6e6 !important; border-left: 3px solid #F44336; color: #000 !important; }
+  .print-summary-report [class*="text-red-"] { color: #a00000 !important; } /* Darker red text */
+  .print-summary-report [class*="bg-gray-100"] { background-color: #f0f0f0 !important; border-left: 3px solid #9E9E9E; color: #000 !important; }
+  .print-summary-report [class*="text-gray-"] { color: #333 !important; }
   
-  /* Ensure icons are visible and use black color */
+  /* Ensure icons are visible and use black color, but not too large */
   .print-summary-report svg {
     fill: currentColor !important; 
     stroke: currentColor !important;
     color: #000 !important; /* Fallback for icons that use text color */
+    width: 1em !important; /* Control icon size */
+    height: 1em !important;
+    vertical-align: middle; /* Align icons better with text */
   }
 
 
   /* General text color overrides */
   .print-summary-report .text-primary,
-  .print-summary-report .text-primary-foreground { color: #000 !important; }
+  .print-summary-report .text-primary-foreground,
+  .print-summary-report .text-secondary-foreground,
+  .print-summary-report .text-accent-foreground { color: #000 !important; }
+
   .print-summary-report .bg-primary { background-color: #e0e0e0 !important; color: #000 !important; border: 1px solid #ccc; }
+  .print-summary-report .bg-secondary { background-color: #f5f5f5 !important; }
   .print-summary-report .text-muted-foreground { color: #444 !important; }
   .print-summary-report .text-foreground { color: #000 !important; }
 
 
-  /* Link styling for print */
+  /* Link styling for print - remove underline, ensure black */
   .print-summary-report a {
     text-decoration: none !important;
     color: #000 !important; 
   }
+  /* Optional: Show full URL for links in print (can be noisy) */
   /* .print-summary-report a[href]:after { content: " (" attr(href) ")"; font-size: 0.8em; } */
 
   /* Ensure full width for containers within the report */
@@ -255,4 +285,10 @@
     margin-left: 0 !important;
     margin-right: 0 !important;
   }
+  
+  /* Ensure list items in accordion content don't break mid-page if possible */
+  .print-summary-report .accordion-content ul li {
+      page-break-inside: avoid;
+  }
 }
+

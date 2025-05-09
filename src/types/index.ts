@@ -24,12 +24,12 @@ export interface HACTQuestion {
 
 export interface HACTSectionScoringLogic {
   totalQuestions: number;
-  totalApplicable?: number;
+  totalApplicableQuestions: number; // From HACT document, used as denominator for average
   totalKey: number;
-  ratingThresholds: Array<{
-    maxPoints?: number;
-    minPoints?: number;
-    score: number;
+  ratingThresholds: Array<{ // Thresholds for AVERAGE risk points per question
+    maxAverageScore?: number; // Upper bound for the average score for this rating
+    minAverageScore?: number; // Lower bound for the average score for this rating
+    numericScore: number; // The 1-4 score (Low=1, Mod=2, Sig=3, High=4)
     rating: 'Low' | 'Moderate' | 'Significant' | 'High';
   }>;
 }
@@ -40,17 +40,20 @@ export interface HACTSection {
   responsibleDepartment: string;
   questions: HACTQuestion[];
   scoringLogic: HACTSectionScoringLogic;
-  totalRiskPoints?: number;
-  riskScore?: number;
-  areaRiskRating?: 'Low' | 'Moderate' | 'Significant' | 'High';
+  totalRiskPoints?: number; // Sum of points from answers
+  averageRiskScore?: number; // totalRiskPoints / totalApplicableQuestions
+  numericRiskScore?: number; // 1-4 score based on averageRiskScore and thresholds
+  areaRiskRating?: 'Low' | 'Moderate' | 'Significant' | 'High'; // Derived from averageRiskScore
 }
 
 export interface HACTAssessment {
   assessmentTitle: string;
   sections: HACTSection[];
-  overallTotalRiskPoints?: number;
-  overallRiskScore?: number;
-  overallRiskRating?: 'Low' | 'Moderate' | 'Significant' | 'High';
+  overallTotalRiskPoints?: number; // Sum of all section totalRiskPoints
+  overallAverageRiskScore?: number; // overallTotalRiskPoints / totalApplicableQuestionsOverall
+  overallNumericRiskScore?: number; // 1-4 score based on overallAverageRiskScore
+  overallRiskRating?: 'Low' | 'Moderate' | 'Significant' | 'High'; // Derived from overallAverageRiskScore
+  overallRatingThresholds?: HACTSectionScoringLogic['ratingThresholds']; // Global thresholds for overall assessment average
 }
 
 export interface Answer {
@@ -81,6 +84,5 @@ export interface AssessmentContextState {
   calculateOverallScore: () => void;
   getRuleBasedRecommendation: (question: HACTQuestion, answer: Answer) => string | null;
   resetAssessment: () => void;
-  areAllQuestionsInSectionAnswered: (sectionId: string) => boolean; // Added
+  areAllQuestionsInSectionAnswered: (sectionId: string) => boolean;
 }
-
