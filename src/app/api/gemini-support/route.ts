@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, Next    // Removed prompt generation logic as Gemini support is no longer usedesponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Always use environment variable for API key
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+// Removed Gemini AI initialization logic
 
 export async function GET(req: NextRequest) {
   const questionId = req.nextUrl.searchParams.get('questionId');
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  if (!process.env.GEMINI_API_KEY) {
+  // Removed Gemini API key validation logic
     return NextResponse.json(
       { supportiveText: 'Please provide relevant details to support your answer' },
       { status: 500 }
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+    // Removed Gemini model initialization logic
     const prompt = `Given the following assessment question: "${questionText}"
 
 Please provide brief, actionable guidance to help answer this question. Focus on:
@@ -33,14 +33,14 @@ Please provide brief, actionable guidance to help answer this question. Focus on
 
 Keep the response concise and practical, under 3 sentences if possible.`;
     
-    const result = await model.generateContent(prompt);
+    // Removed content generation logic as Gemini support is no longer used
     const text = result.response.text();
     
     return NextResponse.json({ 
       supportiveText: text || 'Please provide relevant details to support your answer' 
     });
   } catch (e) {
-    console.error('Gemini API error:', e);
+    // Removed Gemini API error handling
     return NextResponse.json({ 
       supportiveText: 'Please provide relevant details to support your answer',
       error: 'Failed to generate supportive text'

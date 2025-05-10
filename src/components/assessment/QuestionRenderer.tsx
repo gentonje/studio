@@ -27,48 +27,9 @@ export default function QuestionRenderer({ question }: QuestionRendererProps) {
     answerQuestion(question.id, currentAnswer.value, e.target.value);
   };
 
-  // Update state management for supportive text
-  const [supportiveText, setSupportiveText] = useState<string | null>(null);
-  const [isLoadingSupport, setIsLoadingSupport] = useState(false);
-  const [supportError, setSupportError] = useState<string | null>(null);
-
-  async function fetchSupportiveText(questionId: string): Promise<void> {
-    setIsLoadingSupport(true);
-    setSupportError(null);
-
-    try {
-      const response = await fetch(`/api/gemini-support?questionId=${encodeURIComponent(questionId)}&questionText=${encodeURIComponent(question.text)}`);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch supportive text');
-      }
-      
-      setSupportiveText(data.supportiveText);
-    } catch (error) {
-      console.error('Error fetching supportive text:', error);
-      setSupportError(error instanceof Error ? error.message : 'Failed to load support text');
-      setSupportiveText(null);
-    } finally {
-      setIsLoadingSupport(false);
-    }
-  }
-
-  useEffect(() => {
-    if (question.id && question.text) {
-      fetchSupportiveText(question.id);
-    }
-  }, [question.id, question.text]);
-
   // Update the explanation placeholder logic
   let explanationPlaceholder = 'Provide details';
-  if (isLoadingSupport) {
-    explanationPlaceholder = 'Loading guidance...';
-  } else if (supportError) {
-    explanationPlaceholder = 'Provide details. Note: Support text unavailable.';
-  } else if (supportiveText) {
-    explanationPlaceholder = supportiveText;
-  }
+
   let sampleExplanation = '';
   if (question.exampleComment) {
     sampleExplanation = question.exampleComment;

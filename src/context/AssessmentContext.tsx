@@ -141,12 +141,19 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     const section = getCurrentSection();
     return section?.questions[currentQuestionIndexInSection];
   }, [getCurrentSection, currentQuestionIndexInSection]);
-
   const answerQuestion = useCallback((questionId: string, value: Answer['value'], explanation?: string) => {
-    setAnswers(prevAnswers => ({
-      ...prevAnswers,
-      [questionId]: { questionId, value, explanation },
-    }));
+    setAnswers(prevAnswers => {
+      const currentAnswer = prevAnswers[questionId];
+      return {
+        ...prevAnswers,
+        [questionId]: { 
+          questionId, 
+          value,
+          // If no new explanation is provided, keep the existing one (if any)
+          explanation: explanation ?? currentAnswer?.explanation ?? ''
+        },
+      };
+    });
   }, []);
 
  const getQuestionStatus = useCallback((questionId: string): 'answered' | 'unanswered' => {

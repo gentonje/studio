@@ -3,7 +3,7 @@
 'use server';
 
 /**
- * @fileOverview Generates tailored recommendations using the Gemini API for sub-optimal HACT assessment answers.
+ * @fileOverview Removed Gemini API logic for recommendations.
  *
  * - generateHACTRecommendations - A function that generates HACT recommendations.
  * - GenerateHACTRecommendationsInput - The input type for the generateHACTRecommendations function.
@@ -71,7 +71,7 @@ const generateHACTRecommendationsFlow = ai.defineFlow(
     name: 'generateHACTRecommendationsFlow',
     inputSchema: GenerateHACTRecommendationsInputSchema,
     outputSchema: GenerateHACTRecommendationsOutputSchema,
-    config: {
+    // Removed config logic as Gemini support is no longer used
       // Loosen safety settings slightly if needed for detailed financial/governance advice, but be cautious.
       // Example:
       // safetySettings: [
