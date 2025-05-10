@@ -104,7 +104,10 @@ export default function AssessmentSectionPage() {
         </CardContent>
       </Card>
 
-      <QuestionRenderer question={question} />
+      {/* Render the current question */}
+      <QuestionRenderer key={question.id} question={question} />
+
+      {/* Navigation controls */}
       <QuestionNavigation />
     </div>
   );

@@ -17,17 +17,52 @@ interface QuestionRendererProps {
 
 export default function QuestionRenderer({ question }: QuestionRendererProps) {
   const { answers, answerQuestion } = useAssessment();
-  const currentAnswer = answers[question.id] || { value: null, explanation: '' };
 
-  const handleValueChange = (value: 'Yes' | 'No' | 'N/A' | string) => {
-    answerQuestion(question.id, value, currentAnswer.explanation);
+  // Local state for the radio button's selection for the current view.
+  const [currentViewRadioValue, setCurrentViewRadioValue] = useState<string | null | undefined>(undefined);
+  // Local state for the explanation text for the current view.
+  const [currentViewExplanationText, setCurrentViewExplanationText] = useState<string>('');
+
+  // Effect to initialize/reset UI and global answer value when the question.id changes.
+  useEffect(() => {
+    const storedExplanation = answers[question.id]?.explanation || '';
+
+    // Clear the global 'value' for this question when it becomes active,
+    // but retain its existing explanation. This ensures getQuestionStatus
+    // sees it as initially unanswered for navigation validation.
+    answerQuestion(question.id, null, storedExplanation);
+
+    // Reset local UI state for the new question
+    setCurrentViewRadioValue(undefined); // Makes radio buttons appear unselected
+    setCurrentViewExplanationText(storedExplanation); // Loads existing explanation into textarea
+
+  }, [question.id, answerQuestion]); // Rerun when question.id changes. answerQuestion from context should be stable.
+
+  // Effect to synchronize local explanationText if the global explanation for the *current* question
+  // changes externally (e.g. if answers were reloaded or updated by another process).
+  useEffect(() => {
+    const globalExplanationForCurrentQuestion = answers[question.id]?.explanation || '';
+    if (currentViewExplanationText !== globalExplanationForCurrentQuestion) {
+      setCurrentViewExplanationText(globalExplanationForCurrentQuestion);
+    }
+  }, [answers[question.id]?.explanation, question.id]); // More targeted dependency
+
+  const handleRadioSelectionChange = (newSelectedRadioValue: string) => {
+    setCurrentViewRadioValue(newSelectedRadioValue);
+    // Save with the new radio value and the current local explanation text
+    answerQuestion(question.id, newSelectedRadioValue, currentViewExplanationText);
   };
 
-  const handleExplanationChange = (e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
-    answerQuestion(question.id, currentAnswer.value, e.target.value);
+  const handleExplanationInputChange = (e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+    const newExplanation = e.target.value;
+    setCurrentViewExplanationText(newExplanation);
+    // When explanation changes, save it with the current view's radioValue.
+    // If currentViewRadioValue is undefined (user hasn't clicked a radio in this view yet),
+    // the global answer's value (which was set to null by the main useEffect) will be updated with null.
+    answerQuestion(question.id, currentViewRadioValue ?? null, newExplanation);
   };
 
-  // Update the explanation placeholder logic
+  // Update the explanation placeholder logic - this can largely remain the same
   let explanationPlaceholder = 'Provide details';
 
   let sampleExplanation = '';
@@ -56,8 +91,8 @@ export default function QuestionRenderer({ question }: QuestionRendererProps) {
       <div className="space-y-4">
         {options.length > 0 && (
           <RadioGroup
-            value={currentAnswer.value ?? undefined}
-            onValueChange={(val) => handleValueChange(val as 'Yes' | 'No' | 'N/A')}
+            value={currentViewRadioValue ?? undefined} // Use local state for value
+            onValueChange={handleRadioSelectionChange} // Use new handler
             className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0"
           >
             {options.map((option) => (
@@ -74,8 +109,8 @@ export default function QuestionRenderer({ question }: QuestionRendererProps) {
           </Label>
           <Textarea
             id={`${question.id}-explanation`}
-            value={currentAnswer.explanation || ''}
-            onChange={handleExplanationChange}
+            value={currentViewExplanationText} // Use local state for value
+            onChange={handleExplanationInputChange} // Use new handler
             placeholder={explanationPlaceholder}
             rows={3}
             className="text-base"
