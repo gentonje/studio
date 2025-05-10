@@ -37,7 +37,8 @@ export default function WelcomePage() {
              <Image src="https://picsum.photos/120/120" alt="HACT Logo" width={100} height={100} className="rounded-full" data-ai-hint="assessment finance" />
           </div>
           <CardTitle className="text-3xl font-bold">HACT</CardTitle>
-          <CardDescription>Harmonized Approach to Cash Transfers. Streamline your micro-assessment process.</CardDescription>
+          <CardDescription>Harmonized Approach to Cash Transfers. A micro-assessment process.</CardDescription>
+          <CardDescription>This Assessment in an internal tool owned by CARD for Quarterly Self Assessment</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
           <div className="space-y-2">

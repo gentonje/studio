@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Info } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface QuestionRendererProps {
   question: HACTQuestion;
@@ -26,68 +27,106 @@ export default function QuestionRenderer({ question }: QuestionRendererProps) {
     answerQuestion(question.id, currentAnswer.value, e.target.value);
   };
 
-  const renderQuestionContent = () => {
-    switch (question.type) {
-      case 'yes_no_na':
-      case 'yes_no_explain':
-      case 'yes_no_multi_explain':
-        const options = ['Yes', 'No'];
-        if (question.type === 'yes_no_na') options.push('N/A');
-        
-        return (
-          <div className="space-y-4">
-            <RadioGroup
-              value={currentAnswer.value ?? undefined}
-              onValueChange={(val) => handleValueChange(val as 'Yes' | 'No' | 'N/A')}
-              className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0"
-            >
-              {options.map((option) => (
-                <div key={option} className="flex items-center space-x-2 p-2 border rounded-md hover:bg-secondary transition-colors">
-                  <RadioGroupItem value={option} id={`${question.id}-${option}`} />
-                  <Label htmlFor={`${question.id}-${option}`} className="text-base cursor-pointer flex-grow">{option}</Label>
-                </div>
-              ))}
-            </RadioGroup>
-            {(question.type === 'yes_no_explain' || question.type === 'yes_no_multi_explain') && (currentAnswer.value === 'Yes' || currentAnswer.value === 'No') && (
-              <div className="mt-4">
-                <Label htmlFor={`${question.id}-explanation`} className="text-muted-foreground block mb-1">
-                  Explanation ({question.options?.[currentAnswer.value as 'Yes'|'No']?.defaultExplanationPlaceholder || question.options?.[currentAnswer.value as 'Yes'|'No']?.promptForDetails || 'Provide details'}):
-                </Label>
-                <Textarea
-                  id={`${question.id}-explanation`}
-                  value={currentAnswer.explanation || ''}
-                  onChange={handleExplanationChange}
-                  placeholder={question.options?.[currentAnswer.value as 'Yes'|'No']?.defaultExplanationPlaceholder || question.options?.[currentAnswer.value as 'Yes'|'No']?.promptForDetails || 'Enter explanation...'}
-                  rows={3}
-                  className="text-base"
-                />
-              </div>
-            )}
-          </div>
-        );
-      case 'text_input':
-        return (
-          <div>
-            <Label htmlFor={`${question.id}-textInput`} className="text-muted-foreground block mb-1">Your Answer:</Label>
-            <Input
-              id={`${question.id}-textInput`}
-              value={(currentAnswer.value as string) || ''}
-              onChange={(e) => handleValueChange(e.target.value)}
-              placeholder="Type your answer here..."
-              className="text-base"
-            />
-          </div>
-        );
-      case 'info_only':
-        return (
-          <div className="p-4 bg-secondary rounded-md text-secondary-foreground flex items-start gap-3">
-            <Info size={24} className="flex-shrink-0 mt-1 text-primary"/>
-            <p className="text-base">{question.infoContent || question.text}</p>
-          </div>
-        );
-      default:
-        return <p>Unsupported question type.</p>;
+  // Update state management for supportive text
+  const [supportiveText, setSupportiveText] = useState<string | null>(null);
+  const [isLoadingSupport, setIsLoadingSupport] = useState(false);
+  const [supportError, setSupportError] = useState<string | null>(null);
+
+  async function fetchSupportiveText(questionId: string): Promise<void> {
+    setIsLoadingSupport(true);
+    setSupportError(null);
+
+    try {
+      const response = await fetch(`/api/gemini-support?questionId=${encodeURIComponent(questionId)}&questionText=${encodeURIComponent(question.text)}`);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch supportive text');
+      }
+      
+      setSupportiveText(data.supportiveText);
+    } catch (error) {
+      console.error('Error fetching supportive text:', error);
+      setSupportError(error instanceof Error ? error.message : 'Failed to load support text');
+      setSupportiveText(null);
+    } finally {
+      setIsLoadingSupport(false);
     }
+  }
+
+  useEffect(() => {
+    if (question.id && question.text) {
+      fetchSupportiveText(question.id);
+    }
+  }, [question.id, question.text]);
+
+  // Update the explanation placeholder logic
+  let explanationPlaceholder = 'Provide details';
+  if (isLoadingSupport) {
+    explanationPlaceholder = 'Loading guidance...';
+  } else if (supportError) {
+    explanationPlaceholder = 'Provide details. Note: Support text unavailable.';
+  } else if (supportiveText) {
+    explanationPlaceholder = supportiveText;
+  }
+  let sampleExplanation = '';
+  if (question.exampleComment) {
+    sampleExplanation = question.exampleComment;
+  }
+
+  const renderQuestionContent = () => {
+    if (question.type === 'info_only') {
+      return (
+        <div className="p-4 bg-secondary rounded-md text-secondary-foreground flex items-start gap-3">
+          <Info size={24} className="flex-shrink-0 mt-1 text-primary"/>
+          <p className="text-base">{question.infoContent || question.text}</p>
+        </div>
+      );
+    }
+
+    // Determine options for radio group if applicable
+    let options: string[] = [];
+    if (question.type === 'yes_no_na' || question.type === 'yes_no_explain' || question.type === 'yes_no_multi_explain') {
+      options = ['Yes', 'No'];
+      if (question.type === 'yes_no_na') options.push('N/A');
+    }
+
+    return (
+      <div className="space-y-4">
+        {options.length > 0 && (
+          <RadioGroup
+            value={currentAnswer.value ?? undefined}
+            onValueChange={(val) => handleValueChange(val as 'Yes' | 'No' | 'N/A')}
+            className="flex flex-col sm:flex-row sm:space-x-4 space-y-2 sm:space-y-0"
+          >
+            {options.map((option) => (
+              <div key={option} className="flex items-center space-x-2 p-2 border rounded-md hover:bg-secondary transition-colors">
+                <RadioGroupItem value={option} id={`${question.id}-${option}`} />
+                <Label htmlFor={`${question.id}-${option}`} className="text-base cursor-pointer flex-grow">{option}</Label>
+              </div>
+            ))}
+          </RadioGroup>
+        )}
+        <div className="mt-4">
+          <Label htmlFor={`${question.id}-explanation`} className="text-muted-foreground block mb-1">
+            Explanation ({explanationPlaceholder}):
+          </Label>
+          <Textarea
+            id={`${question.id}-explanation`}
+            value={currentAnswer.explanation || ''}
+            onChange={handleExplanationChange}
+            placeholder={explanationPlaceholder}
+            rows={3}
+            className="text-base"
+          />
+          {sampleExplanation && (
+            <div className="mt-1 italic text-xs text-muted-foreground">
+              Example: {sampleExplanation}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (

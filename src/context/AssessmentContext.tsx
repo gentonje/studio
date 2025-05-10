@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ReactNode } from 'react';
@@ -162,13 +161,12 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     if (question?.type === 'yes_no_na' && answer.value === 'N/A') {
         return 'answered'; 
     }
-    
-    // For 'yes_no_explain' and 'yes_no_multi_explain', if 'Yes' or 'No' is selected, it's answered
-    // The explanation part might be optional for just being 'answered' from a navigation perspective,
-    // but could be mandatory for proceeding based on specific question logic.
-    // For now, if a value is selected (Yes/No), it's considered answered.
-    if ((question?.type === 'yes_no_explain' || question?.type === 'yes_no_multi_explain') && (answer.value === 'Yes' || answer.value === 'No')) {
-        return 'answered';
+
+    // For all question types except info_only, require a non-empty explanation
+    if (question?.type !== 'info_only') {
+      if (typeof answer.explanation !== 'string' || answer.explanation.trim() === '') {
+        return 'unanswered';
+      }
     }
 
     // For text_input, any non-empty string means it's answered.
@@ -208,15 +206,15 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
     const currentQ = getCurrentQuestion();
 
     if (currentQ && currentQ.type !== 'info_only') {
-        const status = getQuestionStatus(currentQ.id);
-        if (status === 'unanswered') {
-             toast({
-                title: "Question Unanswered",
-                description: "Please select an answer for the current question before proceeding.",
-                variant: "destructive",
-            });
-            return;
-        }
+      const status = getQuestionStatus(currentQ.id);
+      if (status === 'unanswered') {
+        toast({
+          title: "Question Unanswered",
+          description: "Please select an answer and provide an explanation before proceeding.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     if (section && currentQuestionIndexInSection < section.questions.length - 1) {
@@ -285,14 +283,19 @@ export const AssessmentProvider: React.FC<AssessmentProviderProps> = ({ children
 
         if (answer && answer.value !== null && answer.value !== '') {
             if (answer.value === 'N/A' && q.options?.['N/A']) {
-                totalPoints += q.options['N/A'].points; // N/A option usually has 0 points
-                // N/A answers are typically excluded from the average calculation denominator
-                // if the denominator is dynamic (questionsContributingToAverage).
-                // For HACT's fixed "totalApplicableQuestions", they are included.
+                const naOption = q.options['N/A'];
+                if (naOption && 'points' in naOption) {
+                    totalPoints += naOption.points;
+                }
+                // HACT's fixed "totalApplicableQuestions" includes N/A answers
+                questionsAnsweredForScoring++;
             } else {
-                const optionKey = answer.value as keyof HACTQuestion['options'];
+                const optionKey = answer.value as 'Yes' | 'No' | 'N/A';
                 if (q.options && q.options[optionKey]) {
-                    totalPoints += q.options[optionKey]!.points;
+                    const option = q.options[optionKey];
+                    if (option && 'points' in option) {
+                        totalPoints += option.points;
+                    }
                     questionsAnsweredForScoring++;
                 }
             }

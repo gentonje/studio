@@ -37,8 +37,9 @@ export default function QuestionNavigation({ onSaveAndExit }: QuestionNavigation
     ? (currentQuestion.type === 'info_only' || getQuestionStatus(currentQuestion.id) !== 'unanswered') 
     : false;
 
-  const areAllQuestionsInCurrentSectionEffectivelyAnswered = section 
-    ? areAllQuestionsInSectionAnswered(section.id) 
+  // Pure check for UI feedback (no side effects)
+  const areAllQuestionsInCurrentSectionAnsweredPure = section
+    ? section.questions.filter(q => q.type !== 'info_only').every(q => getQuestionStatus(q.id) !== 'unanswered')
     : false;
   
   const handleNextQuestion = () => {
@@ -47,7 +48,7 @@ export default function QuestionNavigation({ onSaveAndExit }: QuestionNavigation
   };
 
   const handleNextSectionOrSummary = () => {
-    // The logic to check if all questions in section are answered is now inside navigateToNextSection in the context
+    // Only the context version triggers a toast if not all answered
     navigateToNextSection();
   };
 
@@ -67,8 +68,7 @@ export default function QuestionNavigation({ onSaveAndExit }: QuestionNavigation
         isLastSection ? (
           <Button 
             onClick={handleNextSectionOrSummary}
-            // disabled prop can be removed if context handles it, or kept for immediate UI feedback
-            // disabled={!areAllQuestionsInCurrentSectionEffectivelyAnswered} 
+            disabled={!areAllQuestionsInCurrentSectionAnsweredPure}
             className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground"
           >
             View Summary <ListChecks className="ml-2 h-5 w-5" />
@@ -76,7 +76,7 @@ export default function QuestionNavigation({ onSaveAndExit }: QuestionNavigation
         ) : (
           <Button 
             onClick={handleNextSectionOrSummary}
-            // disabled={!areAllQuestionsInCurrentSectionEffectivelyAnswered}
+            disabled={!areAllQuestionsInCurrentSectionAnsweredPure}
             className="w-full sm:w-auto"
           >
             Next Section <CheckSquare className="ml-2 h-5 w-5" />
