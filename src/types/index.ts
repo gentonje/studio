@@ -1,5 +1,4 @@
 
-
 export interface HACTQuestionOption {
   riskAssessment: 'Low' | 'Moderate' | 'Significant' | 'High' | 'N/A';
   points: number;
@@ -47,6 +46,14 @@ export interface HACTSection {
   areaRiskRating?: 'Low' | 'Moderate' | 'Significant' | 'High'; 
 }
 
+// New interface for individual section summaries in the final report
+export interface SectionSummary {
+  sectionId: string;
+  sectionTitle: string;
+  totalRiskPoints?: number; // Using existing field from HACTSection
+  areaRiskRating?: 'Low' | 'Moderate' | 'Significant' | 'High'; // Using existing field from HACTSection
+}
+
 export interface HACTAssessment {
   assessmentTitle: string;
   sections: HACTSection[];
@@ -55,6 +62,7 @@ export interface HACTAssessment {
   overallNumericRiskScore?: number; 
   overallRiskRating?: 'Low' | 'Moderate' | 'Significant' | 'High'; 
   overallRatingThresholds?: HACTSectionScoringLogic['ratingThresholds']; 
+  sectionSummaries?: SectionSummary[]; // Added field for storing section summaries
 }
 
 export interface Answer {
@@ -87,4 +95,3 @@ export interface AssessmentContextState {
   areAllQuestionsInSectionAnswered: (sectionId: string) => boolean;
 }
 
-```
